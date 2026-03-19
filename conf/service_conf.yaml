@@ -1,0 +1,43 @@
+server:
+  host: 0.0.0.0
+  port: 9380
+
+es:
+  hosts: "http://localhost:9200"
+  username: ""
+  password: ""
+
+embedding:
+  api_key: "sk-rwpoicelpcvcuhrqqkmmbuysymulmvkppjksofqclgfoscnq"
+  model_name: "BAAI/bge-m3"
+  base_url: "https://api.siliconflow.cn/v1"
+
+llm:
+  api_key: "sk-rwpoicelpcvcuhrqqkmmbuysymulmvkppjksofqclgfoscnq"
+  model_name: "deepseek-ai/DeepSeek-V3"
+  base_url: "https://api.siliconflow.cn/v1"
+
+rag:
+  chunk_token_num: 512
+  delimiter: "\n!?。；！？"
+  top_k: 5
+  similarity_threshold: 0.2
+  vector_similarity_weight: 0.3
+
+reranker:
+  enabled: true
+  api_key: "sk-rwpoicelpcvcuhrqqkmmbuysymulmvkppjksofqclgfoscnq"
+  model_name: "BAAI/bge-reranker-v2-m3"
+  base_url: "https://api.siliconflow.cn/v1"
+  top_n: 5
+
+graph:
+  enabled: true
+  n_hops: 2
+  max_entities: 10
+  max_relations: 15
+
+crag:
+  enabled: true
+  tavily_api_key: "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"
+  search_provider: "tavily"
