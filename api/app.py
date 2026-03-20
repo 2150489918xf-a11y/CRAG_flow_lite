@@ -2,6 +2,10 @@
 RAGFlow Lite FastAPI 应用
 提供知识库管理、文档上传、检索三组 API
 """
+import os
+# HuggingFace 镜像加速（DeepDoc 模型下载）
+os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+
 import asyncio
 import hashlib
 import logging
