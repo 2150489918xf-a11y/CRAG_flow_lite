@@ -1,8 +1,10 @@
 """
 检索服务路由 (Retrieval + GraphRAG + CRAG)
+各阶段自动计时并记录到 PerfCollector
 """
 import asyncio
 import logging
+import time
 
 from fastapi import APIRouter
 
@@ -14,6 +16,7 @@ from api.models import (
     RetrievalRequest, RetrievalResponse,
     GraphRetrievalRequest, GraphRetrievalResponse,
 )
+from common.perf import perf
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["检索服务"])
@@ -22,20 +25,23 @@ router = APIRouter(prefix="/api", tags=["检索服务"])
 @router.post("/retrieval", response_model=RetrievalResponse)
 async def retrieval(req: RetrievalRequest):
     """混合检索 + Reranker 精排"""
+    t_total = time.perf_counter()
+
     dealer = get_dealer()
     emb_mdl = get_emb()
 
-    result = await dealer.retrieval(
-        question=req.question,
-        embd_mdl=emb_mdl,
-        kb_ids=req.kb_ids,
-        page=1,
-        page_size=req.top_k * 3,
-        similarity_threshold=req.similarity_threshold,
-        vector_similarity_weight=req.vector_similarity_weight,
-        highlight=req.highlight,
-        query_enhancer=get_query_enhancer(),
-    )
+    with perf.timer("es_retrieval"):
+        result = await dealer.retrieval(
+            question=req.question,
+            embd_mdl=emb_mdl,
+            kb_ids=req.kb_ids,
+            page=1,
+            page_size=req.top_k * 3,
+            similarity_threshold=req.similarity_threshold,
+            vector_similarity_weight=req.vector_similarity_weight,
+            highlight=req.highlight,
+            query_enhancer=get_query_enhancer(),
+        )
 
     chunks = result.get("chunks", [])
 
@@ -43,15 +49,18 @@ async def retrieval(req: RetrievalRequest):
     reranker = get_reranker()
     if reranker and chunks:
         try:
-            chunks = reranker.rerank_chunks(
-                req.question, chunks, top_n=req.top_k
-            )
+            with perf.timer("reranker"):
+                chunks = reranker.rerank_chunks(
+                    req.question, chunks, top_n=req.top_k
+                )
             logger.info(f"Reranked {len(result.get('chunks', []))} → {len(chunks)} chunks")
         except Exception as e:
             logger.warning(f"Reranker failed, using original order: {e}")
             chunks = chunks[:req.top_k]
     else:
         chunks = chunks[:req.top_k]
+
+    perf.record("total_retrieval", (time.perf_counter() - t_total) * 1000)
 
     return RetrievalResponse(
         total=result.get("total", 0),
@@ -63,39 +72,34 @@ async def retrieval(req: RetrievalRequest):
 @router.post("/graph_retrieval", response_model=GraphRetrievalResponse)
 async def graph_retrieval(req: GraphRetrievalRequest):
     """
-    GraphRAG + CRAG 增强检索
-
-    完整流程：
-    1. 混合召回 → ES fulltext + KNN
-    2. Reranker 精排 → BGE-Reranker
-    3. GraphRAG 图谱检索 → 四路并行 + PageRank 融合
-    4. CRAG 动态路由 → Correct/Incorrect/Ambiguous 三路流转
-    5. Prompt 组装 → 图谱CSV + 纯净文本 chunks 返回
+    GraphRAG + CRAG 增强检索（含各阶段性能埋点）
     """
+    t_total = time.perf_counter()
     dealer = get_dealer()
     emb_mdl = get_emb()
 
     # ===== Step 1: ES 混合召回 + GraphRAG 查询改写 并行执行 =====
-    es_task = dealer.retrieval(
-        question=req.question,
-        embd_mdl=emb_mdl,
-        kb_ids=req.kb_ids,
-        page=1,
-        page_size=req.top_k * 3,
-        similarity_threshold=req.similarity_threshold,
-        vector_similarity_weight=req.vector_similarity_weight,
-        highlight=req.highlight,
-        query_enhancer=get_query_enhancer(),
-    )
+    with perf.timer("es_retrieval"):
+        es_task = dealer.retrieval(
+            question=req.question,
+            embd_mdl=emb_mdl,
+            kb_ids=req.kb_ids,
+            page=1,
+            page_size=req.top_k * 3,
+            similarity_threshold=req.similarity_threshold,
+            vector_similarity_weight=req.vector_similarity_weight,
+            highlight=req.highlight,
+            query_enhancer=get_query_enhancer(),
+        )
 
-    gs = get_graph_searcher() if req.enable_graph else None
-    rewrite_task = gs.rewrite_query(req.question) if gs else None
+        gs = get_graph_searcher() if req.enable_graph else None
+        rewrite_task = gs.rewrite_query(req.question) if gs else None
 
-    if rewrite_task:
-        text_result, qa = await asyncio.gather(es_task, rewrite_task)
-    else:
-        text_result = await es_task
-        qa = None
+        if rewrite_task:
+            text_result, qa = await asyncio.gather(es_task, rewrite_task)
+        else:
+            text_result = await es_task
+            qa = None
 
     text_chunks = text_result.get("chunks", [])
     doc_aggs = text_result.get("doc_aggs", [])
@@ -106,9 +110,10 @@ async def graph_retrieval(req: GraphRetrievalRequest):
     reranker = get_reranker()
     if reranker and text_chunks:
         try:
-            text_chunks = reranker.rerank_chunks(
-                req.question, text_chunks, top_n=req.top_k
-            )
+            with perf.timer("reranker"):
+                text_chunks = reranker.rerank_chunks(
+                    req.question, text_chunks, top_n=req.top_k
+                )
             logger.info(f"Reranked text chunks → {len(text_chunks)}")
         except Exception as e:
             logger.warning(f"Reranker failed: {e}")
@@ -124,14 +129,15 @@ async def graph_retrieval(req: GraphRetrievalRequest):
 
     if req.enable_graph and gs and qa:
         try:
-            graph_result = await gs.search_with_qa(
-                question=req.question,
-                kb_ids=req.kb_ids,
-                qa=qa,
-                topk_entity=req.max_entities * 2,
-                topk_relation=req.max_relations * 2,
-                n_hops=req.n_hops,
-            )
+            with perf.timer("graph_search"):
+                graph_result = await gs.search_with_qa(
+                    question=req.question,
+                    kb_ids=req.kb_ids,
+                    qa=qa,
+                    topk_entity=req.max_entities * 2,
+                    topk_relation=req.max_relations * 2,
+                    n_hops=req.n_hops,
+                )
             graph_entities = graph_result.entities[:req.max_entities]
             graph_relations = graph_result.relations[:req.max_relations]
             graph_paths = graph_result.paths
@@ -149,11 +155,12 @@ async def graph_retrieval(req: GraphRetrievalRequest):
         crag = get_crag_router()
         if crag:
             try:
-                crag_result = await crag.route(
-                    question=req.question,
-                    local_chunks=text_chunks,
-                    graph_context=graph_context,
-                )
+                with perf.timer("crag_routing"):
+                    crag_result = await crag.route(
+                        question=req.question,
+                        local_chunks=text_chunks,
+                        graph_context=graph_context,
+                    )
                 text_chunks = crag_result["chunks"]
                 graph_context = crag_result["graph_context"]
                 crag_score = crag_result["crag_score"]
@@ -176,6 +183,8 @@ async def graph_retrieval(req: GraphRetrievalRequest):
             "similarity": 1.0,
         }
         text_chunks.insert(0, graph_chunk)
+
+    perf.record("total_graph_retrieval", (time.perf_counter() - t_total) * 1000)
 
     return GraphRetrievalResponse(
         total=text_result.get("total", 0) + len(graph_entities),

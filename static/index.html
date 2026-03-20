@@ -1223,6 +1223,17 @@
                 <div id="uploadStatus" style="margin-top:8px;font-size:12px;color:var(--text-muted)"></div>
             </div>
 
+            <!-- Performance Dashboard -->
+            <div class="card" style="padding:16px" id="perfCard">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                    <span style="font-size:13px;font-weight:600;color:var(--text-secondary)">⚡ 性能监控</span>
+                    <button class="history-clear" onclick="resetPerfStats()">重置</button>
+                </div>
+                <div id="perfStats" style="font-size:12px;color:var(--text-muted);line-height:1.8">
+                    <div style="text-align:center;color:var(--text-muted);padding:8px">暂无数据，执行一次检索后显示</div>
+                </div>
+            </div>
+
             <!-- System Info -->
             <div class="card" style="padding:16px">
                 <div style="font-size:12px;color:var(--text-muted);line-height:1.8">
@@ -1846,6 +1857,7 @@ async function doSearch() {
     } finally {
         btn.disabled = false;
         btn.innerHTML = '🔍 检索';
+        loadPerfStats();
     }
 }
 
@@ -2174,6 +2186,74 @@ document.addEventListener('keydown', e => {
         closeChunkModal();
     }
 });
+
+// ==================== Performance Stats ====================
+const STAGE_LABELS = {
+    'es_retrieval': '🔍 ES检索',
+    'reranker': '🏆 Reranker',
+    'graph_search': '🔗 图谱检索',
+    'crag_routing': '🧠 CRAG路由',
+    'total_retrieval': '∑ 普通检索总耗',
+    'total_graph_retrieval': '∑ 图谱检索总耗',
+};
+
+const STAGE_COLORS = {
+    'es_retrieval': '#3b82f6',
+    'reranker': '#f59e0b',
+    'graph_search': '#6366f1',
+    'crag_routing': '#10b981',
+    'total_retrieval': '#94a3b8',
+    'total_graph_retrieval': '#94a3b8',
+};
+
+async function loadPerfStats() {
+    try {
+        const r = await fetch(`${API}/api/stats`);
+        const raw = await r.json();
+        const data = unwrap(raw) || {};
+        renderPerfStats(data);
+    } catch {}
+}
+
+function renderPerfStats(data) {
+    const el = document.getElementById('perfStats');
+    const stages = Object.keys(data);
+    if (stages.length === 0) {
+        el.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:8px">暂无数据</div>';
+        return;
+    }
+
+    el.innerHTML = stages.map(stage => {
+        const s = data[stage];
+        const label = STAGE_LABELS[stage] || stage;
+        const color = STAGE_COLORS[stage] || 'var(--text-muted)';
+        const isTotal = stage.startsWith('total_');
+        return `
+            <div style="margin-bottom:8px;${isTotal ? 'border-top:1px solid var(--border);padding-top:8px;margin-top:4px' : ''}">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <span style="color:${color};font-weight:500">${label}</span>
+                    <span style="color:var(--text-primary);font-weight:600">${s.last_ms}ms</span>
+                </div>
+                <div style="display:flex;gap:8px;color:var(--text-muted);font-size:11px;margin-top:2px">
+                    <span>avg ${s.avg_ms}</span>
+                    <span>p50 ${s.p50_ms}</span>
+                    <span>p95 ${s.p95_ms}</span>
+                    <span>max ${s.max_ms}</span>
+                    <span>×${s.count}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function resetPerfStats() {
+    try {
+        await fetch(`${API}/api/stats/reset`, { method: 'POST' });
+        document.getElementById('perfStats').innerHTML =
+            '<div style="text-align:center;color:var(--text-muted);padding:8px">已重置</div>';
+        toast('性能统计已重置', 'info');
+    } catch {}
+}
 
 // ==================== Init ====================
 loadSavedParams();

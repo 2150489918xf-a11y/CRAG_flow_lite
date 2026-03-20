@@ -1,5 +1,5 @@
 """
-知识库管理路由 (Knowledge Base CRUD)
+知识库管理路由 (Knowledge Base CRUD + Stats)
 """
 import logging
 import re
@@ -11,6 +11,7 @@ from api.deps import get_es, get_config
 from api.models import KnowledgeBaseCreate, BatchDeleteRequest
 from api.errors import NotFoundError, ValidationError, ExternalServiceError, ok_response
 from rag.nlp.search import index_name
+from common.perf import perf
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["知识库管理"])
@@ -131,3 +132,16 @@ async def batch_delete_knowledgebases(req: BatchDeleteRequest):
         "failed": failed_count,
         "results": results,
     })
+
+
+@router.get("/stats")
+async def get_stats():
+    """获取管道性能统计（各阶段耗时 P50/P95/Avg/Max）"""
+    return ok_response(perf.get_stats())
+
+
+@router.post("/stats/reset")
+async def reset_stats():
+    """重置性能统计"""
+    perf.reset()
+    return ok_response(message="stats reset")
