@@ -14,7 +14,7 @@ import json
 import logging
 from typing import Optional
 
-from rag.llm.chat import ChatClient
+from rag.llm.base import BaseChatClient, get_chat_client
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +48,8 @@ EVALUATOR_USER = """【用户问题】：{question}
 class CRAGEvaluator:
     """CRAG 联合裁判器"""
 
-    def __init__(self, chat_client: ChatClient = None):
-        self.chat = chat_client or ChatClient()
+    def __init__(self, chat_client: BaseChatClient = None):
+        self.chat = chat_client or get_chat_client()
 
     async def evaluate(self, question: str, text_chunks: list,
                        graph_context: str = "") -> dict:

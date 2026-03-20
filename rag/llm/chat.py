@@ -10,12 +10,13 @@ from typing import Optional
 
 from openai import OpenAI
 
+from rag.llm.base import BaseChatClient
 from rag.settings import get_config
 
 logger = logging.getLogger(__name__)
 
 
-class ChatClient:
+class ChatClient(BaseChatClient):
     """OpenAI 兼容协议的 Chat 客户端"""
 
     def __init__(self, api_key=None, model_name=None, base_url=None):

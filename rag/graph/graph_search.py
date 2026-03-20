@@ -16,8 +16,7 @@ from collections import OrderedDict
 
 import numpy as np
 
-from rag.llm.chat import ChatClient
-from rag.llm.embedding import RemoteEmbedding
+from rag.llm.base import BaseChatClient, BaseEmbedding, get_chat_client
 from rag.utils.doc_store_conn import DocStoreConnection, get_doc_store
 from rag.graph.graph_store import GraphStore
 from rag.nlp.search import index_name
@@ -84,11 +83,11 @@ class GraphSearcher:
     _CACHE_MAX = 128
     _CACHE_TTL = 300  # 秒
 
-    def __init__(self, es_conn: DocStoreConnection = None, emb_mdl: RemoteEmbedding = None,
-                 chat_client: ChatClient = None, graph_store: GraphStore = None):
+    def __init__(self, es_conn: DocStoreConnection = None, emb_mdl: BaseEmbedding = None,
+                 chat_client: BaseChatClient = None, graph_store: GraphStore = None):
         self.es_conn = es_conn or get_doc_store()
         self.emb_mdl = emb_mdl
-        self.chat = chat_client or ChatClient()
+        self.chat = chat_client or get_chat_client()
         self.graph_store = graph_store
         self._rewrite_cache: OrderedDict[str, tuple[float, 'QueryAnalysis']] = OrderedDict()
 

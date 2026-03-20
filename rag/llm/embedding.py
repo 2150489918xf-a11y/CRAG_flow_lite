@@ -8,11 +8,12 @@ import numpy as np
 from openai import OpenAI
 
 from rag.nlp import truncate
+from rag.llm.base import BaseEmbedding
 
 logger = logging.getLogger(__name__)
 
 
-class RemoteEmbedding:
+class RemoteEmbedding(BaseEmbedding):
     """
     OpenAI 兼容协议的 Embedding 客户端
     支持 SiliconFlow / OpenAI / 其他兼容 API

@@ -7,7 +7,7 @@ Ambiguous 状态下，本地知识虽然不够但也不能全盘丢弃。
 """
 import logging
 
-from rag.llm.chat import ChatClient
+from rag.llm.base import BaseChatClient, get_chat_client
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +29,8 @@ REFINE_USER = """用户问题：{question}
 class KnowledgeRefiner:
     """Ambiguous 状态下的本地知识提炼器"""
 
-    def __init__(self, chat_client: ChatClient = None):
-        self.chat = chat_client or ChatClient()
+    def __init__(self, chat_client: BaseChatClient = None):
+        self.chat = chat_client or get_chat_client()
 
     async def refine(self, question: str, text_chunks: list) -> list:
         """

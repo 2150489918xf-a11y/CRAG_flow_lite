@@ -6,7 +6,7 @@ import logging
 from typing import Optional
 from dataclasses import dataclass, field
 
-from rag.llm.chat import ChatClient
+from rag.llm.base import BaseChatClient, get_chat_client
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +74,8 @@ class ExtractionResult:
 class GraphExtractor:
     """LLM 驱动的图谱信息提取器"""
 
-    def __init__(self, chat_client: ChatClient = None):
-        self.chat = chat_client or ChatClient()
+    def __init__(self, chat_client: BaseChatClient = None):
+        self.chat = chat_client or get_chat_client()
 
     def extract(self, text: str, chunk_id: str = "") -> ExtractionResult:
         """

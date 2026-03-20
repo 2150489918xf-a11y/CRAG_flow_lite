@@ -20,7 +20,7 @@ import time
 from rag.crag.evaluator import CRAGEvaluator
 from rag.crag.web_search import WebSearcher
 from rag.crag.refiner import KnowledgeRefiner
-from rag.llm.chat import ChatClient
+from rag.llm.base import BaseChatClient, get_chat_client
 from rag.settings import get_config
 
 logger = logging.getLogger(__name__)
@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 class CRAGRouter:
     """CRAG 动态路由控制台"""
 
-    def __init__(self, chat_client: ChatClient = None):
-        self.chat = chat_client or ChatClient()
+    def __init__(self, chat_client: BaseChatClient = None):
+        self.chat = chat_client or get_chat_client()
         self.evaluator = CRAGEvaluator(self.chat)
         self.web_searcher = WebSearcher()
         self.refiner = KnowledgeRefiner(self.chat)

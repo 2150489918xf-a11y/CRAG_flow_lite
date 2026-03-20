@@ -8,7 +8,7 @@ import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
 
-from rag.llm.chat import ChatClient
+from rag.llm.base import BaseChatClient, get_chat_client
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +68,8 @@ class QueryEnhancer:
     _CACHE_MAX = 256
     _CACHE_TTL = 600  # 10 分钟
 
-    def __init__(self, chat_client: ChatClient = None):
-        self.chat = chat_client or ChatClient()
+    def __init__(self, chat_client: BaseChatClient = None):
+        self.chat = chat_client or get_chat_client()
         self._cache: OrderedDict[str, tuple[float, EnhancedQuery]] = OrderedDict()
 
     async def enhance(self, question: str) -> EnhancedQuery:

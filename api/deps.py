@@ -6,7 +6,7 @@ import logging
 import os
 
 from rag.utils.doc_store_conn import get_doc_store
-from rag.llm.embedding import RemoteEmbedding
+from rag.llm.base import get_chat_client, get_embedding, get_reranker as get_reranker_factory
 from rag.nlp.search import Dealer, index_name
 from rag.settings import get_embedding_config, get_config
 
@@ -32,12 +32,7 @@ def get_es():
 def get_emb():
     global _emb_mdl
     if _emb_mdl is None:
-        cfg = get_embedding_config()
-        _emb_mdl = RemoteEmbedding(
-            api_key=cfg["api_key"],
-            model_name=cfg["model_name"],
-            base_url=cfg.get("base_url", ""),
-        )
+        _emb_mdl = get_embedding()
     return _emb_mdl
 
 
@@ -55,10 +50,9 @@ def get_graph_searcher():
         graph_cfg = cfg.get("graph", {})
         if not graph_cfg.get("enabled", False):
             return None
-        from rag.llm.chat import ChatClient
         from rag.graph.graph_search import GraphSearcher
         from rag.graph.graph_store import GraphStore
-        chat = ChatClient()
+        chat = get_chat_client()
         graph_store = GraphStore(es_conn=get_es(), emb_mdl=get_emb())
 
         # 尝试加载已有的图文件
@@ -83,10 +77,7 @@ def get_reranker():
         reranker_cfg = cfg.get("reranker", {})
         if not reranker_cfg.get("enabled", False):
             return None
-        from rag.llm.reranker import BGEReranker
-        _reranker = BGEReranker(
-            model_name=reranker_cfg.get("model_name", "BAAI/bge-reranker-v2-m3"),
-        )
+        _reranker = get_reranker_factory()
     return _reranker
 
 
@@ -97,8 +88,7 @@ def get_crag_router():
         if not cfg.get("crag", {}).get("enabled", False):
             return None
         from rag.crag.router import CRAGRouter
-        from rag.llm.chat import ChatClient
-        _crag_router = CRAGRouter(chat_client=ChatClient())
+        _crag_router = CRAGRouter(chat_client=get_chat_client())
     return _crag_router
 
 
@@ -106,6 +96,5 @@ def get_query_enhancer():
     global _query_enhancer
     if _query_enhancer is None:
         from rag.nlp.query_enhance import QueryEnhancer
-        from rag.llm.chat import ChatClient
-        _query_enhancer = QueryEnhancer(chat_client=ChatClient())
+        _query_enhancer = QueryEnhancer(chat_client=get_chat_client())
     return _query_enhancer

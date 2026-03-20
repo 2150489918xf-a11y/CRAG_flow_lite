@@ -16,7 +16,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from rag.app.chunking import chunk
-from rag.llm.embedding import RemoteEmbedding
+from rag.llm.base import get_embedding, get_chat_client
 from rag.utils.doc_store_conn import get_doc_store
 from rag.nlp.search import index_name
 from rag.settings import get_embedding_config, get_rag_config, get_config
@@ -44,13 +44,8 @@ def build_index(kb_id, docs_dir, lang="Chinese", enable_graph=True):
     logger.info(f"ES 索引就绪: {idx}")
 
     # 2. 配置 Embedding 模型
-    emb_cfg = get_embedding_config()
-    emb_mdl = RemoteEmbedding(
-        api_key=emb_cfg["api_key"],
-        model_name=emb_cfg["model_name"],
-        base_url=emb_cfg.get("base_url", ""),
-    )
-    logger.info(f"Embedding 模型: {emb_cfg['model_name']}")
+    emb_mdl = get_embedding()
+    logger.info(f"Embedding 模型: {emb_mdl.model_name}")
 
     # 3. 扫描文档
     supported_exts = {".pdf", ".docx", ".doc", ".xlsx", ".xls", ".md", ".markdown",
@@ -138,12 +133,11 @@ def _build_graph(kb_id, idx, chunks, es_conn, emb_mdl):
     """GraphRAG 图谱构建子流程"""
     logger.info(f"\n=== 开始 GraphRAG 图谱构建 ===")
 
-    from rag.llm.chat import ChatClient
     from rag.graph.extractor import GraphExtractor
     from rag.graph.graph_store import GraphStore
 
     # 初始化
-    chat = ChatClient()
+    chat = get_chat_client()
     extractor = GraphExtractor(chat)
     graph_store = GraphStore(es_conn=es_conn, emb_mdl=emb_mdl)
 

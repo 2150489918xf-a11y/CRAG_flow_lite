@@ -12,11 +12,12 @@ from typing import Optional
 import requests
 
 from rag.settings import get_config
+from rag.llm.base import BaseReranker
 
 logger = logging.getLogger(__name__)
 
 
-class RemoteReranker:
+class RemoteReranker(BaseReranker):
     """
     远程 Reranker 客户端
 
