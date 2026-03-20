@@ -1218,6 +1218,8 @@ async function deleteKB(id) {
     const btn = document.getElementById('confirmDeleteBtn');
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
+    newBtn.disabled = false;
+    newBtn.textContent = '🗑️ 确认删除';
     newBtn.onclick = async function() {
         newBtn.disabled = true;
         newBtn.textContent = '删除中...';
@@ -1544,6 +1546,8 @@ async function deleteDoc(docName) {
     // Remove old listener by replacing node
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
+    newBtn.disabled = false;
+    newBtn.textContent = '🗑️ 确认删除';
     newBtn.onclick = async function() {
         newBtn.disabled = true;
         newBtn.textContent = '删除中...';
