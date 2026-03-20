@@ -13,6 +13,7 @@ import numpy as np
 from rag.nlp.query import FulltextQueryer, MatchTextExpr, MatchDenseExpr, FusionExpr
 from rag.nlp import tokenizer as rag_tokenizer_module
 from rag.utils.es_conn import ESConnection
+from rag.settings import get_rag_config
 
 rag_tokenizer = rag_tokenizer_module
 logger = logging.getLogger(__name__)
@@ -62,6 +63,9 @@ class Dealer:
             if key in req and req[key] is not None:
                 condition[field] = req[key]
 
+        # 排除父块参与检索 (父块只做内容回溯用)
+        exclude_parent = req.get("exclude_parent", True)
+
         topk = int(req.get("topk", 1024))
         offset = 0
         limit = topk
@@ -70,6 +74,7 @@ class Dealer:
             "docnm_kwd", "content_ltks", "kb_id", "title_tks",
             "important_kwd", "doc_id", "content_with_weight",
             "question_kwd", "question_tks", "doc_type_kwd",
+            "chunk_type_kwd", "parent_id_kwd",
         ]
         kwds = set()
 
@@ -101,7 +106,8 @@ class Dealer:
                 matchExprs.extend([matchDense, fusionExpr])
 
                 res = self.es_conn.search(src, highlight_fields, condition,
-                                          matchExprs, offset, limit, idx_names)
+                                          matchExprs, offset, limit, idx_names,
+                                          exclude_parent=exclude_parent)
                 total = self.es_conn.get_total(res)
 
                 # 结果为空时降低匹配阈值重试
@@ -110,7 +116,8 @@ class Dealer:
                     matchDense.extra_options["similarity"] = 0.17
                     matchExprs = [matchText, matchDense, fusionExpr]
                     res = self.es_conn.search(src, highlight_fields, condition,
-                                              matchExprs, offset, limit, idx_names)
+                                              matchExprs, offset, limit, idx_names,
+                                              exclude_parent=exclude_parent)
                     total = self.es_conn.get_total(res)
 
             if keywords:
@@ -183,9 +190,9 @@ class Dealer:
                         top=1024, doc_ids=None,
                         highlight=False):
         """
-        完整检索流程：search → rerank → 分页 → 返回
+        完整检索流程：search → rerank → 父块回溯 → 分页 → 返回
         """
-        ranks = {"total": 0, "chunks": [], "doc_aggs": {}}
+        ranks = {"total": 0, "chunks": [], "doc_aggs": []}
         if not question:
             return ranks
 
@@ -198,6 +205,7 @@ class Dealer:
             "question": question,
             "topk": top,
             "similarity": similarity_threshold,
+            "exclude_parent": True,
         }
 
         sres = await self.search(req, idx_names, embd_mdl, highlight)
@@ -224,13 +232,48 @@ class Dealer:
         ranks["total"] = len(valid_idx)
 
         if not valid_idx:
-            ranks["doc_aggs"] = []
             return ranks
+
+        # ===== 父块回溯 =====
+        # 收集所有命中 child chunk 的 parent_id
+        parent_ids_needed = set()
+        for i in valid_idx:
+            cid = sres.ids[i]
+            chunk_meta = sres.field.get(cid, {})
+            pid = chunk_meta.get("parent_id_kwd")
+            if pid:
+                parent_ids_needed.add(pid)
+
+        # 批量获取父块内容
+        parent_contents = {}
+        if parent_ids_needed:
+            for idx_nm in idx_names:
+                fetched = self.es_conn.get_by_ids(
+                    list(parent_ids_needed), idx_nm,
+                    source_fields=["content_with_weight", "docnm_kwd",
+                                   "doc_id", "kb_id"]
+                )
+                parent_contents.update(fetched)
+
+        # 父块去重: 同一 parent 只保留最高分的 child
+        seen_parents = set()
+        deduped_valid_idx = []
+        for i in valid_idx:
+            cid = sres.ids[i]
+            chunk_meta = sres.field.get(cid, {})
+            pid = chunk_meta.get("parent_id_kwd")
+            if pid:
+                if pid in seen_parents:
+                    continue
+                seen_parents.add(pid)
+            deduped_valid_idx.append(i)
+
+        ranks["total"] = len(deduped_valid_idx)
 
         # 分页
         begin = (page - 1) * page_size
         end = begin + page_size
-        page_idx = valid_idx[begin:end]
+        page_idx = deduped_valid_idx[begin:end]
 
         dim = len(sres.query_vector)
         vector_column = f"q_{dim}_vec"
@@ -239,10 +282,17 @@ class Dealer:
         for i in page_idx:
             id = sres.ids[i]
             chunk = sres.field.get(id, {})
+            pid = chunk.get("parent_id_kwd")
+
+            # 如果是 child 且有对应 parent，用 parent 的内容
+            content = chunk.get("content_with_weight", "")
+            if pid and pid in parent_contents:
+                content = parent_contents[pid].get("content_with_weight", content)
+
             d = {
                 "chunk_id": id,
                 "content_ltks": chunk.get("content_ltks", ""),
-                "content_with_weight": chunk.get("content_with_weight", ""),
+                "content_with_weight": content,
                 "doc_id": chunk.get("doc_id", ""),
                 "docnm_kwd": chunk.get("docnm_kwd", ""),
                 "kb_id": chunk.get("kb_id", ""),
@@ -251,6 +301,8 @@ class Dealer:
                 "vector_similarity": float(vsim[i]) if vsim is not None and len(vsim) > i else 0.0,
                 "term_similarity": float(tsim[i]) if tsim is not None and len(tsim) > i else 0.0,
                 "vector": chunk.get(vector_column, zero_vector),
+                "parent_id": pid or "",
+                "chunk_type": chunk.get("chunk_type_kwd", "flat"),
             }
             if highlight and sres.highlight:
                 d["highlight"] = sres.highlight.get(id, d["content_with_weight"])
@@ -258,7 +310,7 @@ class Dealer:
 
         # 文档聚合
         doc_aggs = {}
-        for i in valid_idx:
+        for i in deduped_valid_idx:
             id = sres.ids[i]
             chunk = sres.field.get(id, {})
             dnm = chunk.get("docnm_kwd", "")

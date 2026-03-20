@@ -295,6 +295,43 @@ async def delete_knowledgebase(kb_id: str):
     raise HTTPException(404, f"Knowledge base '{kb_id}' not found")
 
 
+class BatchDeleteRequest(BaseModel):
+    kb_ids: list[str]
+
+
+@app.post("/api/knowledgebase/batch_delete")
+async def batch_delete_knowledgebases(req: BatchDeleteRequest):
+    """批量删除知识库"""
+    if not req.kb_ids:
+        return {"status": "error", "detail": "kb_ids 不能为空"}
+
+    es = get_es()
+    results = []
+    deleted_count = 0
+    failed_count = 0
+
+    for kb_id in req.kb_ids:
+        idx = index_name(kb_id)
+        try:
+            if es.delete_idx(idx):
+                results.append({"kb_id": kb_id, "status": "deleted"})
+                deleted_count += 1
+            else:
+                results.append({"kb_id": kb_id, "status": "not_found"})
+                failed_count += 1
+        except Exception as e:
+            results.append({"kb_id": kb_id, "status": "error", "detail": str(e)})
+            failed_count += 1
+            logger.error(f"Failed to delete kb '{kb_id}': {e}")
+
+    return {
+        "status": "ok",
+        "deleted": deleted_count,
+        "failed": failed_count,
+        "results": results,
+    }
+
+
 @app.get("/api/documents/{kb_id}")
 async def list_documents(kb_id: str):
     """列出知识库中的所有文档及其分块数"""
@@ -460,14 +497,15 @@ async def upload_document(
         ck["kb_id"] = kb_id
         ck["knowledge_graph_kwd"] = "chunk"
 
-    # Embedding
+    # Embedding (只对非 parent 块做 embedding，parent 块不参与检索)
     emb_mdl = get_emb()
-    texts = [ck.get("content_with_weight", "") or " " for ck in chunks]
+    emb_chunks = [ck for ck in chunks if ck.get("chunk_type_kwd") != "parent"]
+    texts = [ck.get("content_with_weight", "") or " " for ck in emb_chunks]
 
     batch_size = 16
-    for i in range(0, len(chunks), batch_size):
+    for i in range(0, len(emb_chunks), batch_size):
         batch_texts = texts[i:i + batch_size]
-        batch_chunks = chunks[i:i + batch_size]
+        batch_chunks = emb_chunks[i:i + batch_size]
         try:
             embeddings, _ = emb_mdl.encode(batch_texts)
             for ck, emb in zip(batch_chunks, embeddings):
@@ -577,6 +615,8 @@ async def graph_retrieval(req: GraphRetrievalRequest):
 
     text_chunks = text_result.get("chunks", [])
     doc_aggs = text_result.get("doc_aggs", [])
+    if not isinstance(doc_aggs, list):
+        doc_aggs = list(doc_aggs.values()) if isinstance(doc_aggs, dict) else []
 
     # ===== Step 2: Reranker 精排 =====
     reranker = get_reranker()

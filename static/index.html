@@ -242,15 +242,63 @@
             overflow-y: auto;
         }
 
-        .kb-item {
+        .kb-toolbar {
             display: flex;
             align-items: center;
             justify-content: space-between;
+            padding: 6px 0;
+            margin-bottom: 8px;
+            gap: 8px;
+        }
+
+        .kb-toolbar .kb-select-all {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--text-muted);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .kb-toolbar .kb-select-all input[type="checkbox"] {
+            accent-color: var(--accent);
+            width: 14px;
+            height: 14px;
+            cursor: pointer;
+        }
+
+        .kb-toolbar .kb-batch-delete {
+            padding: 4px 12px;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--red);
+            font-size: 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s;
+        }
+
+        .kb-toolbar .kb-batch-delete.visible {
+            display: inline-flex;
+        }
+
+        .kb-toolbar .kb-batch-delete:hover {
+            background: rgba(239, 68, 68, 0.25);
+        }
+
+        .kb-item {
+            display: flex;
+            align-items: center;
             padding: 10px 12px;
             border-radius: 8px;
             cursor: pointer;
             transition: background 0.2s;
             margin-bottom: 4px;
+            gap: 8px;
         }
 
         .kb-item:hover { background: rgba(99, 102, 241, 0.1); }
@@ -260,9 +308,54 @@
             border: 1px solid var(--border-hover);
         }
 
+        .kb-item .kb-checkbox {
+            accent-color: var(--accent);
+            width: 14px;
+            height: 14px;
+            cursor: pointer;
+            flex-shrink: 0;
+            display: none;
+        }
+
+        .kb-batch-mode .kb-item .kb-checkbox {
+            display: block;
+        }
+
+        .kb-batch-toggle {
+            margin-left: auto;
+            padding: 3px 10px;
+            font-size: 11px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--bg-glass);
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .kb-batch-toggle:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .kb-batch-toggle.active {
+            border-color: rgba(239, 68, 68, 0.4);
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--red);
+        }
+
+        .kb-batch-toggle.active:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
         .kb-item .name {
             font-size: 14px;
             font-weight: 500;
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .kb-item .count {
@@ -271,6 +364,7 @@
             background: var(--bg-secondary);
             padding: 2px 8px;
             border-radius: 10px;
+            flex-shrink: 0;
         }
 
         .kb-item .delete-btn {
@@ -282,6 +376,7 @@
             padding: 2px 6px;
             border-radius: 4px;
             transition: all 0.2s;
+            flex-shrink: 0;
         }
 
         .kb-item .delete-btn:hover {
@@ -965,11 +1060,22 @@
         <!-- Sidebar -->
         <div class="sidebar">
             <!-- Knowledge Base -->
-            <div class="card">
-                <div class="card-title"><span class="icon">📚</span> 知识库管理</div>
+            <div class="card" id="kbCard">
+                <div class="card-title"><span class="icon">📚</span> 知识库管理
+                    <button class="kb-batch-toggle" id="kbBatchToggle" onclick="toggleBatchMode()" style="display:none">🗑️ 批量管理</button>
+                </div>
                 <div class="input-group">
                     <input type="text" id="kbNameInput" placeholder="输入知识库名称...">
                     <button class="btn btn-primary" onclick="createKB()">创建</button>
+                </div>
+                <div class="kb-toolbar" id="kbToolbar" style="display:none">
+                    <label class="kb-select-all">
+                        <input type="checkbox" id="kbSelectAll" onchange="toggleKBSelectAll()">
+                        <span id="kbSelectAllLabel">全选</span>
+                    </label>
+                    <button class="kb-batch-delete" id="kbBatchDeleteBtn" onclick="batchDeleteKBs()">
+                        🗑️ 批量删除 (<span id="kbSelectedCount">0</span>)
+                    </button>
                 </div>
                 <ul class="kb-list" id="kbList">
                     <li class="empty-state" style="padding:20px"><span style="color:var(--text-muted)">暂无知识库</span></li>
@@ -1106,8 +1212,10 @@
 <div class="toast-container" id="toastContainer"></div>
 
 <script>
-const API = 'http://localhost:9380';
+const API = '';
 let selectedKB = null;
+let kbCheckedSet = new Set();
+let kbBatchMode = false;
 
 // ==================== Health Check ====================
 async function checkHealth() {
@@ -1141,6 +1249,8 @@ async function loadKBs() {
 
         if (!d.knowledgebases || d.knowledgebases.length === 0) {
             list.innerHTML = '<li class="empty-state" style="padding:20px"><span style="color:var(--text-muted)">暂无知识库，请先创建</span></li>';
+            document.getElementById('kbBatchToggle').style.display = 'none';
+            document.getElementById('kbToolbar').style.display = 'none';
             return;
         }
 
@@ -1150,11 +1260,25 @@ async function loadKBs() {
             kbDisplayNames[kb.kb_id] = kb.display_name || kb.kb_id;
         });
 
+        // Clean up checked set: remove any IDs no longer in the list
+        const currentKBIds = new Set(d.knowledgebases.map(kb => kb.kb_id));
+        for (const id of kbCheckedSet) {
+            if (!currentKBIds.has(id)) kbCheckedSet.delete(id);
+        }
+
+        // Show batch toggle button (toolbar only visible in batch mode)
+        document.getElementById('kbBatchToggle').style.display = 'inline-flex';
+        if (!kbBatchMode) {
+            document.getElementById('kbToolbar').style.display = 'none';
+        }
+
         list.innerHTML = d.knowledgebases.map(kb => {
             const name = escapeHtml(kb.display_name || kb.kb_id);
+            const checked = kbCheckedSet.has(kb.kb_id) ? 'checked' : '';
             return `
             <li class="kb-item ${selectedKB === kb.kb_id ? 'active' : ''}"
                 data-kbid="${kb.kb_id}">
+                <input type="checkbox" class="kb-checkbox" data-action="check" ${checked}>
                 <span class="name">📂 ${name}</span>
                 <span class="count">${kb.doc_count} 条</span>
                 <button class="browse-btn" data-action="browse" title="浏览分块">🔎</button>
@@ -1162,11 +1286,16 @@ async function loadKBs() {
             </li>
         `}).join('');
 
+        updateKBBatchUI(d.knowledgebases.length);
+
         // Event delegation for KB list
         list.onclick = function(e) {
             const li = e.target.closest('.kb-item');
             if (!li) return;
             const kbId = li.getAttribute('data-kbid');
+
+            const checkbox = e.target.closest('[data-action="check"]');
+            if (checkbox) { e.stopPropagation(); toggleKBCheck(kbId, checkbox.checked, d.knowledgebases.length); return; }
 
             const browseBtn = e.target.closest('[data-action="browse"]');
             if (browseBtn) { e.stopPropagation(); openChunkModal(kbId); return; }
@@ -1232,6 +1361,112 @@ async function deleteKB(id) {
         } catch (e) {
             closeConfirm();
             toast('删除失败: ' + e.message, 'error');
+        }
+    };
+}
+
+// ==================== Batch Delete ====================
+function toggleBatchMode() {
+    kbBatchMode = !kbBatchMode;
+    const card = document.getElementById('kbCard');
+    const toolbar = document.getElementById('kbToolbar');
+    const toggle = document.getElementById('kbBatchToggle');
+
+    if (kbBatchMode) {
+        card.classList.add('kb-batch-mode');
+        toolbar.style.display = 'flex';
+        toggle.textContent = '✕ 取消';
+        toggle.classList.add('active');
+    } else {
+        card.classList.remove('kb-batch-mode');
+        toolbar.style.display = 'none';
+        toggle.textContent = '🗑️ 批量管理';
+        toggle.classList.remove('active');
+        // Clear selections
+        kbCheckedSet.clear();
+        document.querySelectorAll('#kbList .kb-checkbox').forEach(cb => cb.checked = false);
+        updateKBBatchUI(0);
+    }
+}
+
+function toggleKBCheck(kbId, isChecked, totalCount) {
+    if (isChecked) {
+        kbCheckedSet.add(kbId);
+    } else {
+        kbCheckedSet.delete(kbId);
+    }
+    updateKBBatchUI(totalCount);
+}
+
+function toggleKBSelectAll() {
+    const selectAll = document.getElementById('kbSelectAll');
+    const checkboxes = document.querySelectorAll('#kbList .kb-checkbox');
+    checkboxes.forEach(cb => {
+        const kbId = cb.closest('.kb-item').getAttribute('data-kbid');
+        cb.checked = selectAll.checked;
+        if (selectAll.checked) {
+            kbCheckedSet.add(kbId);
+        } else {
+            kbCheckedSet.delete(kbId);
+        }
+    });
+    updateKBBatchUI(checkboxes.length);
+}
+
+function updateKBBatchUI(totalCount) {
+    const count = kbCheckedSet.size;
+    const btn = document.getElementById('kbBatchDeleteBtn');
+    const countSpan = document.getElementById('kbSelectedCount');
+    const selectAll = document.getElementById('kbSelectAll');
+    const label = document.getElementById('kbSelectAllLabel');
+
+    countSpan.textContent = count;
+    btn.classList.toggle('visible', count > 0);
+    selectAll.checked = count > 0 && count === totalCount;
+    label.textContent = selectAll.checked ? '取消全选' : '全选';
+}
+
+async function batchDeleteKBs() {
+    const ids = Array.from(kbCheckedSet);
+    if (ids.length === 0) return;
+
+    const names = ids.map(id => kbDisplayNames[id] || id);
+    const preview = names.length <= 3
+        ? names.map(n => `"${n}"`).join('、')
+        : names.slice(0, 3).map(n => `"${n}"`).join('、') + ` 等 ${names.length} 个`;
+
+    document.getElementById('confirmMsg').innerHTML =
+        `确定要批量删除 <strong>${preview}</strong> 知识库及其所有数据吗？<br>此操作不可撤销！`;
+    document.getElementById('confirmOverlay').classList.add('active');
+
+    const btn = document.getElementById('confirmDeleteBtn');
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+    newBtn.disabled = false;
+    newBtn.textContent = `🗑️ 确认删除 (${ids.length})`;
+    newBtn.onclick = async function() {
+        newBtn.disabled = true;
+        newBtn.textContent = '批量删除中...';
+        try {
+            const r = await fetch(`${API}/api/knowledgebase/batch_delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ kb_ids: ids }),
+            });
+            const d = await r.json();
+            closeConfirm();
+            if (d.status === 'ok') {
+                toast(`✅ 批量删除完成：成功 ${d.deleted} 个，失败 ${d.failed} 个`, 'success');
+                kbCheckedSet.clear();
+                if (ids.includes(selectedKB)) selectedKB = null;
+                kbBatchMode = true; toggleBatchMode(); // exit batch mode
+                loadKBs();
+            } else {
+                toast(`⚠️ 批量删除失败: ${d.detail || '未知错误'}`, 'error');
+            }
+        } catch (e) {
+            closeConfirm();
+            toast('❌ 批量删除失败: ' + e.message, 'error');
         }
     };
 }

@@ -185,3 +185,36 @@ def naive_merge(sections, chunk_token_num=512, delimiter="\n!?。；！？"):
         chunks.append(current_chunk)
 
     return chunks
+
+
+def hierarchical_merge(sections, parent_token_num=1024, child_token_num=256,
+                       delimiter="\n!?。；！？"):
+    """
+    两层分块算法：先生成 Parent 块，再将每个 Parent 切分为 Child 块
+
+    Args:
+        sections: [(text, tag), ...] 段落列表
+        parent_token_num: 父块最大 token 数
+        child_token_num: 子块最大 token 数
+        delimiter: 句级分隔符
+
+    Returns:
+        list[dict]: 每项 {"parent_text": str, "children": [str, ...]}
+    """
+    # 第一层: 生成 Parent 块
+    parent_chunks = naive_merge(sections, parent_token_num, delimiter)
+
+    result = []
+    for parent_text in parent_chunks:
+        # 第二层: 将每个 Parent 切分为 Child 块
+        # 将 parent_text 包装为 sections 格式给 naive_merge
+        child_sections = [(parent_text, "text")]
+        children = naive_merge(child_sections, child_token_num, delimiter)
+
+        # 如果子块切分后只有一个且内容和父块相同，则不需要分层
+        result.append({
+            "parent_text": parent_text,
+            "children": children,
+        })
+
+    return result

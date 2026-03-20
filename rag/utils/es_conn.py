@@ -86,7 +86,7 @@ class ESConnection:
             return {}
 
     def search(self, select_fields, highlight_fields, condition, match_expressions,
-               offset, limit, index_names, rank_feature=None):
+               offset, limit, index_names, rank_feature=None, exclude_parent=False):
         """
         混合检索
         照搬 RAGFlow ESConnection.search 核心逻辑
@@ -105,6 +105,15 @@ class ESConnection:
             elif isinstance(v, (str, int)):
                 bool_query.filter.append(Q("term", **{k: v}))
 
+        # 排除父块参与搜索（父块只用于内容回溯）
+        if exclude_parent:
+            if not hasattr(bool_query, 'must_not') or not bool_query.must_not:
+                bool_query = Q("bool", must=bool_query.must,
+                               filter=bool_query.filter if hasattr(bool_query, 'filter') else [],
+                               must_not=[Q("term", chunk_type_kwd="parent")])
+            else:
+                bool_query.must_not.append(Q("term", chunk_type_kwd="parent"))
+
         s = Search()
         vector_similarity_weight = 0.5
 
@@ -120,26 +129,63 @@ class ESConnection:
                 minimum_should_match = m.extra_options.get("minimum_should_match", 0.0)
                 if isinstance(minimum_should_match, float):
                     minimum_should_match = str(int(minimum_should_match * 100)) + "%"
-                bool_query.must.append(Q("query_string",
-                                         fields=m.fields,
-                                         type="best_fields",
-                                         query=m.matching_text,
-                                         minimum_should_match=minimum_should_match,
-                                         boost=1))
+                # 使用 should 而非 must，让全文匹配增强分数但不阻止跨语言向量匹配
+                if not hasattr(bool_query, 'should') or not bool_query.should:
+                    bool_query = Q("bool",
+                                   must=bool_query.must,
+                                   filter=bool_query.filter if hasattr(bool_query, 'filter') else [],
+                                   must_not=bool_query.must_not if hasattr(bool_query, 'must_not') else [],
+                                   should=[Q("query_string",
+                                             fields=m.fields,
+                                             type="best_fields",
+                                             query=m.matching_text,
+                                             minimum_should_match=minimum_should_match,
+                                             boost=1)])
+                else:
+                    bool_query.should.append(Q("query_string",
+                                               fields=m.fields,
+                                               type="best_fields",
+                                               query=m.matching_text,
+                                               minimum_should_match=minimum_should_match,
+                                               boost=1))
                 bool_query.boost = 1.0 - vector_similarity_weight
 
             elif isinstance(m, MatchDenseExpr):
                 similarity = m.extra_options.get("similarity", 0.0)
+                # KNN 过滤器只用 filter + must_not 条件（不含 should/全文匹配）
+                # 避免跨语言检索时全文匹配条件阻止向量检索结果
+                knn_filter_parts = {}
+                bq_dict = bool_query.to_dict()
+                bq_inner = bq_dict.get("bool", bq_dict)
+                if bq_inner.get("filter"):
+                    knn_filter_parts["filter"] = bq_inner["filter"]
+                if bq_inner.get("must_not"):
+                    knn_filter_parts["must_not"] = bq_inner["must_not"]
+                knn_filter = {"bool": knn_filter_parts} if knn_filter_parts else None
+
+                knn_kwargs = {
+                    "query_vector": list(m.embedding_data),
+                    "similarity": similarity,
+                }
+                if knn_filter:
+                    knn_kwargs["filter"] = knn_filter
+
                 s = s.knn(
                     m.vector_column_name,
                     m.topn,
                     m.topn * 2,
-                    query_vector=list(m.embedding_data),
-                    filter=bool_query.to_dict(),
-                    similarity=similarity,
+                    **knn_kwargs,
                 )
 
         if bool_query:
+            # 当 should 存在但 must 为空时，ES 要求至少匹配一个 should
+            # 添加 match_all 到 must 使 should 变为纯加分项（跨语言检索核心修复）
+            bq_dict = bool_query.to_dict()
+            bq_inner = bq_dict.get("bool", {})
+            has_should = bool(bq_inner.get("should"))
+            has_must = bool(bq_inner.get("must"))
+            if has_should and not has_must:
+                bool_query.must.append(Q("match_all"))
             s = s.query(bool_query)
 
         for field in highlight_fields:
@@ -149,7 +195,7 @@ class ESConnection:
             s = s[offset:offset + limit]
 
         q = s.to_dict()
-        logger.debug(f"ES search query: {json.dumps(q, ensure_ascii=False)[:500]}")
+        logger.info(f"ES search query: {json.dumps(q, ensure_ascii=False)}")
 
         for i in range(ATTEMPT_TIME):
             try:
@@ -214,6 +260,35 @@ class ESConnection:
                 logger.warning(f"ES delete error: {e}")
                 time.sleep(1)
         return 0
+
+    def get_by_ids(self, ids, index_name, source_fields=None):
+        """
+        批量获取文档 (mget)
+
+        Args:
+            ids: 文档 ID 列表
+            index_name: 索引名
+            source_fields: 返回的字段列表，None 表示全部
+
+        Returns:
+            dict: {id: {field: value, ...}, ...}
+        """
+        if not ids:
+            return {}
+        body = {"ids": list(set(ids))}
+        kwargs = {"index": index_name, "body": body}
+        if source_fields:
+            kwargs["_source"] = source_fields
+        try:
+            res = self.es.mget(**kwargs)
+            result = {}
+            for doc in res.get("docs", []):
+                if doc.get("found"):
+                    result[doc["_id"]] = doc.get("_source", {})
+            return result
+        except Exception as e:
+            logger.warning(f"ES mget failed: {e}")
+            return {}
 
     # ---- 辅助方法 ----
 

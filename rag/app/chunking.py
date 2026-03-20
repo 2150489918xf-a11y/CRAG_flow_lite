@@ -9,7 +9,8 @@ import os
 import re
 
 from rag.nlp import (
-    naive_merge, tokenize_fn, tokenize_chunks, tokenize_table,
+    naive_merge, hierarchical_merge,
+    tokenize_fn, tokenize_chunks, tokenize_table,
     num_tokens_from_string, find_codec, rag_tokenizer,
 )
 from rag.settings import get_rag_config
@@ -86,6 +87,8 @@ def chunk(filename, binary=None, lang="Chinese", parser_config=None):
             - content_sm_ltks: 细粒度分词
             - docnm_kwd: 文件名
             - doc_type_kwd: "text" | "table"
+            - chunk_type_kwd: "flat" | "parent" | "child"
+            - parent_id_kwd: 父块 ID (仅 child 类型)
     """
     rag_cfg = get_rag_config()
     if parser_config:
@@ -93,6 +96,9 @@ def chunk(filename, binary=None, lang="Chinese", parser_config=None):
 
     chunk_token_num = rag_cfg.get("chunk_token_num", 512)
     delimiter = rag_cfg.get("delimiter", "\n!?。；！？")
+    use_parent_child = rag_cfg.get("use_parent_child", False)
+    parent_token_num = rag_cfg.get("parent_token_num", 1024)
+    child_token_num = rag_cfg.get("child_token_num", 256)
 
     ext = os.path.splitext(filename)[-1].lower()
     if not ext and filename.find(".") > 0:
@@ -141,23 +147,60 @@ def chunk(filename, binary=None, lang="Chinese", parser_config=None):
         "doc_type_kwd": "text",
     }
 
-    # 分块：合并小段落
-    merged_chunks = naive_merge(sections, chunk_token_num, delimiter)
+    chunks = []
 
-    # 生成带分词信息的 chunks
-    chunks = tokenize_chunks(merged_chunks, doc_template, eng)
+    if use_parent_child:
+        # ===== 父子块模式 =====
+        hierarchy = hierarchical_merge(sections, parent_token_num,
+                                       child_token_num, delimiter)
+        chunk_idx = 0
+        for pi, group in enumerate(hierarchy):
+            parent_text = group["parent_text"]
+            children = group["children"]
 
-    # 处理表格
+            # 生成 Parent chunk
+            parent_d = copy.deepcopy(doc_template)
+            parent_id = _make_chunk_id(docnm, f"p{pi}", parent_text)
+            parent_d["id"] = parent_id
+            parent_d["chunk_type_kwd"] = "parent"
+            tokenize_fn(parent_d, parent_text, eng)
+            chunks.append(parent_d)
+
+            # 生成 Child chunks
+            for ci, child_text in enumerate(children):
+                child_d = copy.deepcopy(doc_template)
+                child_id = _make_chunk_id(docnm, f"c{chunk_idx}", child_text)
+                child_d["id"] = child_id
+                child_d["chunk_type_kwd"] = "child"
+                child_d["parent_id_kwd"] = parent_id
+                child_d["position_int"] = [chunk_idx]
+                tokenize_fn(child_d, child_text, eng)
+                chunks.append(child_d)
+                chunk_idx += 1
+
+        logger.info(f"Chunked {filename} (parent-child): "
+                     f"{len(hierarchy)} parents, {chunk_idx} children")
+    else:
+        # ===== 平铺模式 (原逻辑) =====
+        merged_chunks = naive_merge(sections, chunk_token_num, delimiter)
+        chunks = tokenize_chunks(merged_chunks, doc_template, eng)
+        for i, ck in enumerate(chunks):
+            content = ck.get("content_with_weight", "")
+            ck["id"] = _make_chunk_id(docnm, i, content)
+            ck["chunk_type_kwd"] = "flat"
+
+        logger.info(f"Chunked {filename}: {len(chunks)} chunks "
+                     f"({len(merged_chunks)} text + {len(tables)} tables)")
+
+    # 处理表格 (两种模式通用)
     if tables:
         table_chunks = tokenize_table(tables, doc_template, eng)
+        for ti, tck in enumerate(table_chunks):
+            tck["id"] = _make_chunk_id(docnm, f"t{ti}",
+                                        tck.get("content_with_weight", ""))
+            tck["chunk_type_kwd"] = "flat"
         chunks.extend(table_chunks)
 
-    # 为每个 chunk 分配 ID
-    for i, ck in enumerate(chunks):
-        content = ck.get("content_with_weight", "")
-        ck["id"] = _make_chunk_id(docnm, i, content)
-
-    logger.info(f"Chunked {filename}: {len(chunks)} chunks ({len(merged_chunks)} text + {len(tables)} tables)")
     return chunks
 
 

@@ -49,6 +49,9 @@ def get_rag_config():
         "top_k": 5,
         "similarity_threshold": 0.2,
         "vector_similarity_weight": 0.3,
+        "use_parent_child": False,
+        "parent_token_num": 1024,
+        "child_token_num": 256,
     }
     rag_cfg = cfg.get("rag", {})
     for k, v in defaults.items():

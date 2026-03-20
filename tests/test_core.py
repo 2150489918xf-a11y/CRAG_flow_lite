@@ -344,6 +344,90 @@ def test_graph_search_format():
         print(f"    {line}")
 
 
+def test_hierarchical_merge():
+    """测试两层分块算法"""
+    print("\n=== 测试 hierarchical_merge ===")
+    from rag.nlp import hierarchical_merge, num_tokens_from_string
+
+    # 构造足够长的段落
+    sections = [
+        ("这是一段关于人工智能的介绍。" * 30, "text"),
+        ("机器学习是AI的核心技术。" * 30, "text"),
+        ("深度学习推动了计算机视觉的发展。" * 30, "text"),
+        ("自然语言处理让机器理解人类语言。" * 30, "text"),
+    ]
+
+    result = hierarchical_merge(sections, parent_token_num=512, child_token_num=128)
+    assert len(result) > 0, "hierarchical_merge 返回空结果"
+
+    total_children = 0
+    for i, group in enumerate(result):
+        assert "parent_text" in group, "缺少 parent_text"
+        assert "children" in group, "缺少 children"
+        assert len(group["children"]) > 0, f"parent[{i}] 没有 children"
+        parent_tokens = num_tokens_from_string(group["parent_text"])
+        total_children += len(group["children"])
+        print(f"  parent[{i}]: {parent_tokens} tokens, {len(group['children'])} children")
+
+        # 验证子块内容是父块的子集
+        combined_children = "".join(group["children"])
+        # Children 的合并内容的字符应大致等于 parent (允许分隔符差异)
+        assert len(combined_children) > 0, f"parent[{i}] 的 children 内容为空"
+
+    print(f"  ✅ hierarchical_merge: {len(result)} parents, {total_children} children")
+
+
+def test_chunking_parent_child():
+    """测试 parent-child 模式的完整分块流程"""
+    print("\n=== 测试 parent-child 分块 ===")
+    from rag.app.chunking import chunk
+
+    # 创建较长的测试文本
+    test_text = "\n\n".join([
+        "RAGFlow 是一个基于深度文档理解的开源 RAG 引擎。" * 20,
+        "它提供了简洁的 RAG 工作流，适用于任何规模的企业。" * 20,
+        "核心特性包括深度文档理解、混合检索、智能分块等。" * 20,
+    ])
+
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
+        f.write(test_text)
+        tmp_path = f.name
+
+    try:
+        chunks = chunk(tmp_path, lang="Chinese", parser_config={
+            "use_parent_child": True,
+            "parent_token_num": 512,
+            "child_token_num": 128,
+        })
+        assert len(chunks) > 0, "分块结果为空"
+
+        parents = [c for c in chunks if c.get("chunk_type_kwd") == "parent"]
+        children = [c for c in chunks if c.get("chunk_type_kwd") == "child"]
+
+        assert len(parents) > 0, "没有 parent chunks"
+        assert len(children) > 0, "没有 child chunks"
+
+        print(f"  ✅ 总 chunks: {len(chunks)} (parents: {len(parents)}, children: {len(children)})")
+
+        # 验证 child 都有 parent_id_kwd
+        parent_ids = {p["id"] for p in parents}
+        for child in children:
+            assert "parent_id_kwd" in child, f"child {child['id']} 缺少 parent_id_kwd"
+            assert child["parent_id_kwd"] in parent_ids, \
+                f"child {child['id']} 的 parent_id_kwd 指向不存在的 parent"
+
+        print(f"  ✅ 所有 child 的 parent_id_kwd 校验通过")
+
+        # 验证 parent 没有 parent_id_kwd
+        for p in parents:
+            assert "parent_id_kwd" not in p, f"parent {p['id']} 不应有 parent_id_kwd"
+
+        print(f"  ✅ parent chunks 校验通过")
+    finally:
+        os.unlink(tmp_path)
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("RAGFlow Lite 核心模块测试")
@@ -358,6 +442,8 @@ if __name__ == "__main__":
         test_query,
         test_parsers,
         test_chunking,
+        test_hierarchical_merge,
+        test_chunking_parent_child,
         test_graph_extractor_dataclasses,
         test_graph_store,
         test_graph_search_format,

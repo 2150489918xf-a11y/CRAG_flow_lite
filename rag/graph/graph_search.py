@@ -189,7 +189,7 @@ class GraphSearcher:
                     ]
                 }
             },
-            "sort": [{"pagerank_flt": {"order": "desc"}}],
+            "sort": [{"pagerank_flt": {"order": "desc", "unmapped_type": "float"}}],
             "size": topk,
             "_source": True,
         }

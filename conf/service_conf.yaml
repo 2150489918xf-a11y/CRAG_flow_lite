@@ -23,6 +23,9 @@ rag:
   top_k: 5
   similarity_threshold: 0.2
   vector_similarity_weight: 0.3
+  use_parent_child: true
+  parent_token_num: 1024
+  child_token_num: 256
 
 reranker:
   enabled: true
