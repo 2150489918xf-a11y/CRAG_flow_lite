@@ -21,7 +21,8 @@ from rag.utils.doc_store_conn import get_doc_store
 from rag.nlp.search import index_name
 from rag.settings import get_embedding_config, get_rag_config, get_config
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+from common.log_config import setup_logging
+setup_logging("INFO")
 logger = logging.getLogger(__name__)
 
 

@@ -108,15 +108,22 @@ def register_error_handlers(app: FastAPI):
 # ══════════════════════════════════════════
 
 def register_request_logging(app: FastAPI):
-    """注册请求日志中间件：记录每个请求的耗时"""
+    """注册请求日志中间件：Trace ID + 耗时"""
 
     @app.middleware("http")
     async def log_requests(request: Request, call_next):
+        from common.log_config import set_trace_id, clear_trace_id
+        # 从 header 取或自动生成
+        trace_id = request.headers.get("X-Trace-ID", "")
+        set_trace_id(trace_id)
+
         start = time.time()
         response = await call_next(request)
         elapsed = (time.time() - start) * 1000
+
         if not request.url.path.startswith("/static"):
             logger.info(
                 f"{request.method} {request.url.path} → {response.status_code} ({elapsed:.0f}ms)"
             )
+        clear_trace_id()
         return response
