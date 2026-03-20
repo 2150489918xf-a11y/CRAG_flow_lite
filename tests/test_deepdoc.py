@@ -19,7 +19,12 @@ def test_deepdoc_pdf():
         {"parser_id": "naive", "use_parent_child": True},
         {"parser_id": "qa"},
         {"parser_id": "laws"},
-        {"parser_id": "one"}
+        {"parser_id": "one"},
+        {"parser_id": "book"},
+        {"parser_id": "paper"},
+        {"parser_id": "presentation"},
+        {"parser_id": "table"},
+        {"parser_id": "manual"}
     ]
 
     for cfg in configs:

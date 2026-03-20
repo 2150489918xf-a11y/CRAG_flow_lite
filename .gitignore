@@ -34,3 +34,13 @@ Thumbs.db
 # Gemini agent artifacts
 .gemini/
 .agents/
+
+# Data & Models
+/data/
+*.onnx
+
+# Test artifacts
+test_doc.pdf
+dummy_*.txt
+traceback_*.txt
+chunks.txt
