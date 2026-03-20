@@ -9,10 +9,12 @@ from openai import OpenAI
 
 from rag.nlp import truncate
 from rag.llm.base import BaseEmbedding
+from common.registry import embedding_registry
 
 logger = logging.getLogger(__name__)
 
 
+@embedding_registry.register("openai")
 class RemoteEmbedding(BaseEmbedding):
     """
     OpenAI 兼容协议的 Embedding 客户端

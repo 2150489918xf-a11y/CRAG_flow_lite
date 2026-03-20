@@ -120,21 +120,25 @@ _instance: Optional[DocStoreConnection] = None
 def get_doc_store(**kwargs) -> DocStoreConnection:
     """
     获取文档存储连接器单例。
-    当前默认实现为 Elasticsearch，未来可通过配置切换后端。
+    通过 service_conf.yaml 的 doc_store.backend 配置切换后端。
+    新增后端只需:
+      1. 继承 DocStoreConnection
+      2. @doc_store_registry.register("your_backend")
+      3. 在 service_conf.yaml 设置 doc_store.backend: your_backend
     """
     global _instance
     if _instance is not None:
         return _instance
 
+    from common.registry import doc_store_registry
     from rag.settings import get_config
+
+    # 确保内置后端已注册 (触发 es_conn 模块加载)
+    import rag.utils.es_conn  # noqa: F401
+
     cfg = get_config()
     backend = cfg.get("doc_store", {}).get("backend", "elasticsearch")
 
-    if backend == "elasticsearch":
-        from rag.utils.es_conn import ESConnection
-        _instance = ESConnection(**kwargs)
-    else:
-        raise ValueError(f"Unsupported doc store backend: {backend}")
-
+    _instance = doc_store_registry.create(backend, **kwargs)
     logger.info(f"DocStore backend initialized: {backend}")
     return _instance

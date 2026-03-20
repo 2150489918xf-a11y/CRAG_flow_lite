@@ -13,10 +13,12 @@ import requests
 
 from rag.settings import get_config
 from rag.llm.base import BaseReranker
+from common.registry import reranker_registry
 
 logger = logging.getLogger(__name__)
 
 
+@reranker_registry.register("remote")
 class RemoteReranker(BaseReranker):
     """
     远程 Reranker 客户端

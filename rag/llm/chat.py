@@ -12,10 +12,12 @@ from openai import OpenAI
 
 from rag.llm.base import BaseChatClient
 from rag.settings import get_config
+from common.registry import chat_registry
 
 logger = logging.getLogger(__name__)
 
 
+@chat_registry.register("openai")
 class ChatClient(BaseChatClient):
     """OpenAI 兼容协议的 Chat 客户端"""
 
