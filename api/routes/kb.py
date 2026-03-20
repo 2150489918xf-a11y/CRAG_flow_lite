@@ -5,10 +5,11 @@ import logging
 import re
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from api.deps import get_es, get_config
 from api.models import KnowledgeBaseCreate, BatchDeleteRequest
+from api.errors import NotFoundError, ValidationError, ExternalServiceError, ok_response
 from rag.nlp.search import index_name
 
 logger = logging.getLogger(__name__)
@@ -20,15 +21,14 @@ async def health():
     try:
         info = get_es().health()
         cfg = get_config()
-        return {
-            "status": "ok",
+        return ok_response({
             "es_status": info.get("status", "unknown"),
             "graph_enabled": cfg.get("graph", {}).get("enabled", False),
             "crag_enabled": cfg.get("crag", {}).get("enabled", False),
             "reranker_enabled": cfg.get("reranker", {}).get("enabled", False),
-        }
+        })
     except Exception as e:
-        return {"status": "error", "detail": str(e)}
+        raise ExternalServiceError("Elasticsearch", str(e))
 
 
 @router.post("/knowledgebase")
@@ -36,7 +36,7 @@ async def create_knowledgebase(req: KnowledgeBaseCreate):
     """创建知识库（ES 索引），支持中文名"""
     display_name = req.kb_id.strip()
     if not display_name:
-        return {"status": "error", "detail": "知识库名称不能为空"}
+        raise ValidationError("知识库名称不能为空")
 
     safe_id = re.sub(r'[^a-z0-9_]', '', req.kb_id.lower().replace(' ', '_').replace('-', '_'))
     if not safe_id:
@@ -52,15 +52,20 @@ async def create_knowledgebase(req: KnowledgeBaseCreate):
             meta = es.get_index_meta(existing_idx)
             if meta.get("display_name") == display_name:
                 existing_kb_id = existing_idx.replace("ragflow_lite_", "")
-                return {"status": "exists", "kb_id": existing_kb_id, "display_name": display_name, "index": existing_idx}
+                return ok_response({
+                    "kb_id": existing_kb_id, "display_name": display_name,
+                    "index": existing_idx,
+                }, message="exists")
     except Exception:
         pass
 
     if es.index_exist(idx):
-        return {"status": "exists", "kb_id": safe_id, "display_name": display_name, "index": idx}
+        return ok_response({"kb_id": safe_id, "display_name": display_name, "index": idx},
+                           message="exists")
 
     es.create_idx(idx, display_name=display_name)
-    return {"status": "created", "kb_id": safe_id, "display_name": display_name, "index": idx}
+    return ok_response({"kb_id": safe_id, "display_name": display_name, "index": idx},
+                       message="created")
 
 
 @router.get("/knowledgebase")
@@ -81,9 +86,9 @@ async def list_knowledgebases():
                 "index": idx_name_str,
                 "doc_count": count,
             })
-        return {"knowledgebases": kbs}
+        return ok_response({"knowledgebases": kbs})
     except Exception as e:
-        return {"knowledgebases": [], "error": str(e)}
+        raise ExternalServiceError("Elasticsearch", str(e))
 
 
 @router.delete("/knowledgebase/{kb_id}")
@@ -92,15 +97,15 @@ async def delete_knowledgebase(kb_id: str):
     es = get_es()
     idx = index_name(kb_id)
     if es.delete_idx(idx):
-        return {"status": "deleted", "kb_id": kb_id}
-    raise HTTPException(404, f"Knowledge base '{kb_id}' not found")
+        return ok_response({"kb_id": kb_id}, message="deleted")
+    raise NotFoundError("知识库", kb_id)
 
 
 @router.post("/knowledgebase/batch_delete")
 async def batch_delete_knowledgebases(req: BatchDeleteRequest):
     """批量删除知识库"""
     if not req.kb_ids:
-        return {"status": "error", "detail": "kb_ids 不能为空"}
+        raise ValidationError("kb_ids 不能为空")
 
     es = get_es()
     results = []
@@ -121,9 +126,8 @@ async def batch_delete_knowledgebases(req: BatchDeleteRequest):
             failed_count += 1
             logger.error(f"Failed to delete kb '{kb_id}': {e}")
 
-    return {
-        "status": "ok",
+    return ok_response({
         "deleted": deleted_count,
         "failed": failed_count,
         "results": results,
-    }
+    })

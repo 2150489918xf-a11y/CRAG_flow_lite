@@ -6,9 +6,10 @@ import logging
 import time
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, UploadFile, File, Form
 
 from api.deps import get_es, get_emb
+from api.errors import NotFoundError, ExternalServiceError, ok_response
 from rag.app.chunking import chunk
 from rag.nlp.search import index_name
 
@@ -22,7 +23,7 @@ async def list_documents(kb_id: str):
     es = get_es()
     idx = index_name(kb_id)
     if not es.index_exist(idx):
-        raise HTTPException(404, f"Knowledge base '{kb_id}' not found")
+        raise NotFoundError("知识库", kb_id)
 
     try:
         r = es.es.search(
@@ -50,9 +51,9 @@ async def list_documents(kb_id: str):
                 "doc_name": bucket["key"],
                 "chunk_count": bucket["doc_count"],
             })
-        return {"documents": docs, "total": len(docs)}
+        return ok_response({"documents": docs, "total": len(docs)})
     except Exception as e:
-        raise HTTPException(500, f"Failed to list documents: {e}")
+        raise ExternalServiceError("Elasticsearch", f"列出文档失败: {e}")
 
 
 @router.get("/chunks/{kb_id}")
@@ -62,7 +63,7 @@ async def list_chunks(kb_id: str, page: int = 1, page_size: int = 20,
     es = get_es()
     idx = index_name(kb_id)
     if not es.index_exist(idx):
-        raise HTTPException(404, f"Knowledge base '{kb_id}' not found")
+        raise NotFoundError("知识库", kb_id)
 
     from_ = (page - 1) * page_size
 
@@ -106,15 +107,15 @@ async def list_chunks(kb_id: str, page: int = 1, page_size: int = 20,
                 "doc_type_kwd": src.get("doc_type_kwd", "text"),
                 "char_count": len(content),
             })
-        return {
+        return ok_response({
             "total": total,
             "page": page,
             "page_size": page_size,
             "total_pages": (total + page_size - 1) // page_size,
             "chunks": chunks,
-        }
+        })
     except Exception as e:
-        raise HTTPException(500, f"Failed to list chunks: {e}")
+        raise ExternalServiceError("Elasticsearch", f"列出分块失败: {e}")
 
 
 @router.delete("/document/{kb_id}/{doc_name:path}")
@@ -123,7 +124,7 @@ async def delete_document(kb_id: str, doc_name: str):
     es = get_es()
     idx = index_name(kb_id)
     if not es.index_exist(idx):
-        raise HTTPException(404, f"Knowledge base '{kb_id}' not found")
+        raise NotFoundError("知识库", kb_id)
 
     try:
         r = es.es.delete_by_query(
@@ -137,14 +138,13 @@ async def delete_document(kb_id: str, doc_name: str):
         )
         deleted = r.get("deleted", 0)
         logger.info(f"Deleted {deleted} chunks for doc '{doc_name}' from kb '{kb_id}'")
-        return {
-            "status": "ok",
+        return ok_response({
             "deleted_chunks": deleted,
             "doc_name": doc_name,
             "kb_id": kb_id,
-        }
+        })
     except Exception as e:
-        raise HTTPException(500, f"Failed to delete document: {e}")
+        raise ExternalServiceError("Elasticsearch", f"删除文档失败: {e}")
 
 
 @router.post("/document/upload")
@@ -158,7 +158,7 @@ async def upload_document(
     idx = index_name(kb_id)
 
     if not es.index_exist(idx):
-        raise HTTPException(404, f"Knowledge base '{kb_id}' not found. Create it first.")
+        raise NotFoundError("知识库", kb_id)
 
     binary = await file.read()
     filename = file.filename or "unknown.txt"
@@ -169,7 +169,7 @@ async def upload_document(
     # 分块
     chunks = chunk(filename, binary=binary, lang=lang)
     if not chunks:
-        return {"status": "empty", "message": "No content extracted from document"}
+        return ok_response({"filename": filename, "chunks": 0}, message="empty")
 
     for ck in chunks:
         ck["doc_id"] = doc_id
@@ -191,8 +191,7 @@ async def upload_document(
                 dim = len(emb)
                 ck[f"q_{dim}_vec"] = emb.tolist()
         except Exception as e:
-            logger.error(f"Embedding failed: {e}")
-            raise HTTPException(500, f"Embedding failed: {e}")
+            raise ExternalServiceError("Embedding", str(e))
 
     # 写入
     errors = es.insert(chunks, idx)
@@ -201,10 +200,9 @@ async def upload_document(
     except Exception:
         pass
 
-    return {
-        "status": "ok",
+    return ok_response({
         "doc_id": doc_id,
         "filename": filename,
         "chunks": len(chunks),
         "errors": errors[:5] if errors else [],
-    }
+    })

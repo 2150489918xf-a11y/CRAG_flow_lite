@@ -34,6 +34,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 注册统一错误处理 + 请求日志
+from api.errors import register_error_handlers, register_request_logging
+register_error_handlers(app)
+register_request_logging(app)
+
 
 # ==================== 注册路由 ====================
 
