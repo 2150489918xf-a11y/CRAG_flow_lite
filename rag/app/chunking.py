@@ -40,6 +40,11 @@ def _ensure_factories_registered():
         "qa": "rag.app.qa:chunk",
         "laws": "rag.app.laws:chunk",
         "one": "rag.app.one:chunk",
+        "book": "rag.app.book:chunk",
+        "paper": "rag.app.paper:chunk",
+        "presentation": "rag.app.presentation:chunk",
+        "table": "rag.app.table:chunk",
+        "manual": "rag.app.manual:chunk",
     })
 
 def _get_extractor(ext):
@@ -109,8 +114,14 @@ def chunk(filename, binary=None, lang="Chinese", parser_config=None):
         logger.warning(f"No content extracted from {filename}")
         return []
 
-    # 2. 策略路由分发
+    # 2. 策略路由分发 (First-Level Routing)
     parser_id = rag_cfg.get("parser_id", "naive")
+    
+    # 智能特例 (Smart Exception)：PPT 格式强行应用 presentation 切片策略
+    if ext in [".ppt", ".pptx"]:
+        parser_id = "presentation"
+        logger.info(f"Smart Exception applied: {ext} format auto-routed to 'presentation' strategy.")
+
     chunker_fn = _get_chunker(parser_id)
 
     logger.info(f"Routing document {filename} to chunking strategy: {parser_id}")
