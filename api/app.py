@@ -51,6 +51,7 @@ _emb_mdl = None
 _dealer = None
 _graph_searcher = None
 _reranker = None
+_query_enhancer = None
 
 
 def get_es():
@@ -138,6 +139,15 @@ def get_crag_router():
     return _crag_router
 
 
+def get_query_enhancer():
+    global _query_enhancer
+    if _query_enhancer is None:
+        from rag.nlp.query_enhance import QueryEnhancer
+        from rag.llm.chat import ChatClient
+        _query_enhancer = QueryEnhancer(chat_client=ChatClient())
+    return _query_enhancer
+
+
 # ==================== 数据模型 ====================
 
 class KnowledgeBaseCreate(BaseModel):
@@ -149,7 +159,7 @@ class RetrievalRequest(BaseModel):
     question: str
     kb_ids: list[str]
     top_k: int = 5
-    similarity_threshold: float = 0.2
+    similarity_threshold: float = 0.1
     vector_similarity_weight: float = 0.3
     highlight: bool = False
 
@@ -159,7 +169,7 @@ class GraphRetrievalRequest(BaseModel):
     question: str
     kb_ids: list[str]
     top_k: int = 5
-    similarity_threshold: float = 0.2
+    similarity_threshold: float = 0.1
     vector_similarity_weight: float = 0.3
     highlight: bool = False
     enable_graph: bool = True
@@ -544,10 +554,11 @@ async def retrieval(req: RetrievalRequest):
         embd_mdl=emb_mdl,
         kb_ids=req.kb_ids,
         page=1,
-        page_size=req.top_k * 3,  # 召回更多供 Reranker 精排
+        page_size=req.top_k * 3,
         similarity_threshold=req.similarity_threshold,
         vector_similarity_weight=req.vector_similarity_weight,
         highlight=req.highlight,
+        query_enhancer=get_query_enhancer(),
     )
 
     chunks = result.get("chunks", [])
@@ -601,6 +612,7 @@ async def graph_retrieval(req: GraphRetrievalRequest):
         similarity_threshold=req.similarity_threshold,
         vector_similarity_weight=req.vector_similarity_weight,
         highlight=req.highlight,
+        query_enhancer=get_query_enhancer(),
     )
 
     # GraphRAG 查询改写（先启动，利用等待 ES 的时间完成 LLM 调用）

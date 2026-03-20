@@ -12,6 +12,7 @@ import numpy as np
 
 from rag.nlp.query import FulltextQueryer, MatchTextExpr, MatchDenseExpr, FusionExpr
 from rag.nlp import tokenizer as rag_tokenizer_module
+from rag.nlp.query_enhance import QueryEnhancer
 from rag.utils.es_conn import ESConnection
 from rag.settings import get_rag_config
 
@@ -94,7 +95,9 @@ class Dealer:
                                           matchExprs, offset, limit, idx_names)
                 total = self.es_conn.get_total(res)
             else:
-                matchDense = await self.get_vector(qst, emb_mdl, topk, req.get("similarity", 0.1))
+                # KNN 使用极低阈值（广撒网），真正的质量过滤在 rerank 阶段
+                knn_similarity = 0.01
+                matchDense = await self.get_vector(qst, emb_mdl, topk, knn_similarity)
                 q_vec = matchDense.embedding_data
                 src.append(f"q_{len(q_vec)}_vec")
 
@@ -188,7 +191,8 @@ class Dealer:
                         similarity_threshold=0.2,
                         vector_similarity_weight=0.3,
                         top=1024, doc_ids=None,
-                        highlight=False):
+                        highlight=False,
+                        query_enhancer: QueryEnhancer = None):
         """
         完整检索流程：search → rerank → 父块回溯 → 分页 → 返回
         """
@@ -209,6 +213,20 @@ class Dealer:
         }
 
         sres = await self.search(req, idx_names, embd_mdl, highlight)
+
+        # LLM 查询增强失败或未启用时，且初次召回为 0，再做增强重试
+        enhanced_query = None
+        if sres.total == 0 and query_enhancer and embd_mdl:
+            try:
+                enhanced_query = await query_enhancer.enhance(question)
+                if enhanced_query.translated:
+                    # 用增强后的文本（含翻译关键词）重新构建全文查询
+                    enhanced_text = enhanced_query.enhanced_text
+                    req["question"] = enhanced_text
+                    sres = await self.search(req, idx_names, embd_mdl, highlight)
+                    logger.info(f"Enhanced retrieval: '{question[:20]}' → '{enhanced_text[:40]}', total={sres.total}")
+            except Exception as e:
+                logger.warning(f"Query enhancement failed: {e}")
 
         if sres.total == 0 or not sres.query_vector:
             ranks["total"] = sres.total

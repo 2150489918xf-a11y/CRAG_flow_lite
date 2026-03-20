@@ -123,37 +123,33 @@ class ESConnection:
                 weights = m.fusion_params["weights"]
                 vector_similarity_weight = float(weights.split(",")[1])
 
+        # 检测是否为混合检索模式（含向量检索）
+        has_vector = any(isinstance(m, MatchDenseExpr) for m in match_expressions)
+
         # 构建查询
         for m in match_expressions:
             if isinstance(m, MatchTextExpr):
-                minimum_should_match = m.extra_options.get("minimum_should_match", 0.0)
-                if isinstance(minimum_should_match, float):
-                    minimum_should_match = str(int(minimum_should_match * 100)) + "%"
-                # 使用 should 而非 must，让全文匹配增强分数但不阻止跨语言向量匹配
-                if not hasattr(bool_query, 'should') or not bool_query.should:
-                    bool_query = Q("bool",
-                                   must=bool_query.must,
-                                   filter=bool_query.filter if hasattr(bool_query, 'filter') else [],
-                                   must_not=bool_query.must_not if hasattr(bool_query, 'must_not') else [],
-                                   should=[Q("query_string",
+                if has_vector:
+                    # 混合检索模式：不将全文匹配加入 ES bool_query
+                    # 全文匹配分数由 rerank 阶段的 hybrid_similarity 计算
+                    # 这样跨语言查询（如中文查英文文档）不会被 BM25 零匹配阻断
+                    pass
+                else:
+                    # 纯全文检索模式：全文匹配加入 must
+                    minimum_should_match = m.extra_options.get("minimum_should_match", 0.0)
+                    if isinstance(minimum_should_match, float):
+                        minimum_should_match = str(int(minimum_should_match * 100)) + "%"
+                    bool_query.must.append(Q("query_string",
                                              fields=m.fields,
                                              type="best_fields",
                                              query=m.matching_text,
                                              minimum_should_match=minimum_should_match,
-                                             boost=1)])
-                else:
-                    bool_query.should.append(Q("query_string",
-                                               fields=m.fields,
-                                               type="best_fields",
-                                               query=m.matching_text,
-                                               minimum_should_match=minimum_should_match,
-                                               boost=1))
-                bool_query.boost = 1.0 - vector_similarity_weight
+                                             boost=1))
+                    bool_query.boost = 1.0 - vector_similarity_weight
 
             elif isinstance(m, MatchDenseExpr):
                 similarity = m.extra_options.get("similarity", 0.0)
-                # KNN 过滤器只用 filter + must_not 条件（不含 should/全文匹配）
-                # 避免跨语言检索时全文匹配条件阻止向量检索结果
+                # KNN 过滤器只用 filter + must_not 条件（不含全文匹配）
                 knn_filter_parts = {}
                 bq_dict = bool_query.to_dict()
                 bq_inner = bq_dict.get("bool", bq_dict)
@@ -178,14 +174,6 @@ class ESConnection:
                 )
 
         if bool_query:
-            # 当 should 存在但 must 为空时，ES 要求至少匹配一个 should
-            # 添加 match_all 到 must 使 should 变为纯加分项（跨语言检索核心修复）
-            bq_dict = bool_query.to_dict()
-            bq_inner = bq_dict.get("bool", {})
-            has_should = bool(bq_inner.get("should"))
-            has_must = bool(bq_inner.get("must"))
-            if has_should and not has_must:
-                bool_query.must.append(Q("match_all"))
             s = s.query(bool_query)
 
         for field in highlight_fields:
@@ -195,7 +183,7 @@ class ESConnection:
             s = s[offset:offset + limit]
 
         q = s.to_dict()
-        logger.info(f"ES search query: {json.dumps(q, ensure_ascii=False)}")
+        logger.debug(f"ES search query: {json.dumps(q, ensure_ascii=False)[:500]}")
 
         for i in range(ATTEMPT_TIME):
             try:
