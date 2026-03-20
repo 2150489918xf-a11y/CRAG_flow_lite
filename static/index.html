@@ -1214,6 +1214,14 @@
 <script>
 const API = '';
 let selectedKB = null;
+
+// Helper: unwrap unified {code, message, data} response
+function unwrap(resp) {
+    if (resp && typeof resp === 'object' && 'code' in resp && 'data' in resp) {
+        return resp.data;
+    }
+    return resp; // fallback for endpoints that don't use new format (e.g., search)
+}
 let kbCheckedSet = new Set();
 let kbBatchMode = false;
 
@@ -1221,15 +1229,16 @@ let kbBatchMode = false;
 async function checkHealth() {
     try {
         const r = await fetch(`${API}/api/health`);
-        const d = await r.json();
+        const raw = await r.json();
+        const d = unwrap(raw);
         const dot = document.getElementById('statusDot');
         const text = document.getElementById('statusText');
-        if (d.status === 'ok') {
+        if (r.ok && d) {
             dot.className = 'status-dot';
             text.textContent = `ES: ${d.es_status} | Graph: ${d.graph_enabled ? '✓' : '✗'}`;
         } else {
             dot.className = 'status-dot offline';
-            text.textContent = '服务异常';
+            text.textContent = raw.message || '服务异常';
         }
     } catch {
         document.getElementById('statusDot').className = 'status-dot offline';
@@ -1244,10 +1253,12 @@ let kbDisplayNames = {};
 async function loadKBs() {
     try {
         const r = await fetch(`${API}/api/knowledgebase`);
-        const d = await r.json();
+        const raw = await r.json();
+        const d = unwrap(raw) || {};
         const list = document.getElementById('kbList');
+        const kbs = d.knowledgebases || [];
 
-        if (!d.knowledgebases || d.knowledgebases.length === 0) {
+        if (kbs.length === 0) {
             list.innerHTML = '<li class="empty-state" style="padding:20px"><span style="color:var(--text-muted)">暂无知识库，请先创建</span></li>';
             document.getElementById('kbBatchToggle').style.display = 'none';
             document.getElementById('kbToolbar').style.display = 'none';
@@ -1256,12 +1267,12 @@ async function loadKBs() {
 
         // Build display name map
         kbDisplayNames = {};
-        d.knowledgebases.forEach(kb => {
+        kbs.forEach(kb => {
             kbDisplayNames[kb.kb_id] = kb.display_name || kb.kb_id;
         });
 
         // Clean up checked set: remove any IDs no longer in the list
-        const currentKBIds = new Set(d.knowledgebases.map(kb => kb.kb_id));
+        const currentKBIds = new Set(kbs.map(kb => kb.kb_id));
         for (const id of kbCheckedSet) {
             if (!currentKBIds.has(id)) kbCheckedSet.delete(id);
         }
@@ -1272,7 +1283,7 @@ async function loadKBs() {
             document.getElementById('kbToolbar').style.display = 'none';
         }
 
-        list.innerHTML = d.knowledgebases.map(kb => {
+        list.innerHTML = kbs.map(kb => {
             const name = escapeHtml(kb.display_name || kb.kb_id);
             const checked = kbCheckedSet.has(kb.kb_id) ? 'checked' : '';
             return `
@@ -1286,7 +1297,7 @@ async function loadKBs() {
             </li>
         `}).join('');
 
-        updateKBBatchUI(d.knowledgebases.length);
+        updateKBBatchUI(kbs.length);
 
         // Event delegation for KB list
         list.onclick = function(e) {
@@ -1295,7 +1306,7 @@ async function loadKBs() {
             const kbId = li.getAttribute('data-kbid');
 
             const checkbox = e.target.closest('[data-action="check"]');
-            if (checkbox) { e.stopPropagation(); toggleKBCheck(kbId, checkbox.checked, d.knowledgebases.length); return; }
+            if (checkbox) { e.stopPropagation(); toggleKBCheck(kbId, checkbox.checked, kbs.length); return; }
 
             const browseBtn = e.target.closest('[data-action="browse"]');
             if (browseBtn) { e.stopPropagation(); openChunkModal(kbId); return; }
@@ -1321,8 +1332,9 @@ async function createKB() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ kb_id: name })
         });
-        const d = await r.json();
-        toast(`知识库 "${name}" ${d.status === 'created' ? '创建成功' : '已存在'}`, 'success');
+        const raw = await r.json();
+        const d = unwrap(raw) || {};
+        toast(`知识库 "${name}" ${raw.message === 'created' ? '创建成功' : '已存在'}`, 'success');
         input.value = '';
         selectedKB = d.kb_id;
         loadKBs();
@@ -1453,16 +1465,17 @@ async function batchDeleteKBs() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ kb_ids: ids }),
             });
-            const d = await r.json();
+            const raw = await r.json();
+            const d = unwrap(raw) || {};
             closeConfirm();
-            if (d.status === 'ok') {
+            if (r.ok) {
                 toast(`✅ 批量删除完成：成功 ${d.deleted} 个，失败 ${d.failed} 个`, 'success');
                 kbCheckedSet.clear();
                 if (ids.includes(selectedKB)) selectedKB = null;
                 kbBatchMode = true; toggleBatchMode(); // exit batch mode
                 loadKBs();
             } else {
-                toast(`⚠️ 批量删除失败: ${d.detail || '未知错误'}`, 'error');
+                toast(`⚠️ 批量删除失败: ${raw.message || '未知错误'}`, 'error');
             }
         } catch (e) {
             closeConfirm();
@@ -1514,12 +1527,13 @@ async function uploadFiles(files) {
                 method: 'POST',
                 body: formData,
             });
-            const d = await r.json();
+            const raw = await r.json();
+            const d = unwrap(raw) || {};
 
-            if (d.status === 'ok') {
+            if (r.ok) {
                 toast(`✅ ${file.name}: ${d.chunks} 个 chunks`, 'success');
             } else {
-                toast(`⚠️ ${file.name}: ${d.message || '上传异常'}`, 'error');
+                toast(`⚠️ ${file.name}: ${raw.message || '上传异常'}`, 'error');
             }
         } catch (e) {
             toast(`❌ ${file.name} 上传失败: ${e.message}`, 'error');
@@ -1681,7 +1695,8 @@ async function loadDocList() {
 
     try {
         const r = await fetch(`${API}/api/documents/${chunkBrowserKB}`);
-        const d = await r.json();
+        const raw = await r.json();
+        const d = unwrap(raw) || {};
         chunkDocList = (d.documents || []).map(doc => ({...doc, checked: true}));
 
         if (chunkDocList.length === 0) {
@@ -1790,16 +1805,17 @@ async function deleteDoc(docName) {
             const r = await fetch(`${API}/api/document/${chunkBrowserKB}/${encodeURIComponent(docName)}`, {
                 method: 'DELETE',
             });
-            const d = await r.json();
+            const raw = await r.json();
+            const d = unwrap(raw) || {};
             closeConfirm();
-            if (d.status === 'ok') {
+            if (r.ok) {
                 toast(`✅ 已删除 "${docName}"（${d.deleted_chunks} 个分块）`, 'success');
                 await loadDocList();
                 chunkBrowserPage = 1;
                 await loadChunks();
                 loadKBs();
             } else {
-                toast(`⚠️ 删除失败: ${d.detail || '未知错误'}`, 'error');
+                toast(`⚠️ 删除失败: ${raw.message || '未知错误'}`, 'error');
             }
         } catch (e) {
             closeConfirm();
@@ -1831,7 +1847,8 @@ async function loadChunks() {
     try {
         const docParam = encodeURIComponent(selectedDocs.join(','));
         const r = await fetch(`${API}/api/chunks/${chunkBrowserKB}?page=${chunkBrowserPage}&page_size=20&doc_names=${docParam}`);
-        const d = await r.json();
+        const raw = await r.json();
+        const d = unwrap(raw) || {};
 
         if (!d.chunks || d.chunks.length === 0) {
             body.innerHTML = '<div class="empty-state"><div class="icon">📭</div><div>该文档暂无分块数据</div></div>';
