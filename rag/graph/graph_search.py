@@ -18,7 +18,7 @@ import numpy as np
 
 from rag.llm.chat import ChatClient
 from rag.llm.embedding import RemoteEmbedding
-from rag.utils.es_conn import ESConnection
+from rag.utils.doc_store_conn import DocStoreConnection, get_doc_store
 from rag.graph.graph_store import GraphStore
 from rag.nlp.search import index_name
 
@@ -84,9 +84,9 @@ class GraphSearcher:
     _CACHE_MAX = 128
     _CACHE_TTL = 300  # 秒
 
-    def __init__(self, es_conn: ESConnection = None, emb_mdl: RemoteEmbedding = None,
+    def __init__(self, es_conn: DocStoreConnection = None, emb_mdl: RemoteEmbedding = None,
                  chat_client: ChatClient = None, graph_store: GraphStore = None):
-        self.es_conn = es_conn or ESConnection()
+        self.es_conn = es_conn or get_doc_store()
         self.emb_mdl = emb_mdl
         self.chat = chat_client or ChatClient()
         self.graph_store = graph_store

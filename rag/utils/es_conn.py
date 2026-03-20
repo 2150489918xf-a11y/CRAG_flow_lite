@@ -13,13 +13,14 @@ from elasticsearch_dsl import Q, Search, UpdateByQuery
 
 from rag.nlp.query import MatchTextExpr, MatchDenseExpr, FusionExpr
 from rag.settings import get_es_config, get_project_base_directory
+from rag.utils.doc_store_conn import DocStoreConnection
 
 logger = logging.getLogger(__name__)
 
 ATTEMPT_TIME = 2
 
 
-class ESConnection:
+class ESConnection(DocStoreConnection):
     """
     Elasticsearch 连接和 CRUD 操作
     """

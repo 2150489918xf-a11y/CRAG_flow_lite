@@ -13,7 +13,7 @@ import numpy as np
 from rag.nlp.query import FulltextQueryer, MatchTextExpr, MatchDenseExpr, FusionExpr
 from rag.nlp import tokenizer as rag_tokenizer_module
 from rag.nlp.query_enhance import QueryEnhancer
-from rag.utils.es_conn import ESConnection
+from rag.utils.doc_store_conn import DocStoreConnection, get_doc_store
 from rag.settings import get_rag_config
 
 rag_tokenizer = rag_tokenizer_module
@@ -31,9 +31,9 @@ class Dealer:
     照搬 RAGFlow search.py Dealer 的检索、重排逻辑
     """
 
-    def __init__(self, es_conn: ESConnection = None):
+    def __init__(self, es_conn: DocStoreConnection = None):
         self.qryr = FulltextQueryer()
-        self.es_conn = es_conn or ESConnection()
+        self.es_conn = es_conn or get_doc_store()
 
     @dataclass
     class SearchResult:

@@ -15,7 +15,7 @@ import numpy as np
 
 from rag.graph.extractor import Entity, Relation, ExtractionResult
 from rag.llm.embedding import RemoteEmbedding
-from rag.utils.es_conn import ESConnection
+from rag.utils.doc_store_conn import DocStoreConnection, get_doc_store
 from rag.nlp.tokenizer import tokenizer as rag_tokenizer
 
 logger = logging.getLogger(__name__)
@@ -29,8 +29,8 @@ class GraphStore:
     - 持久化：ES 索引（实体和关系作为扁平文档存储）
     """
 
-    def __init__(self, es_conn: ESConnection = None, emb_mdl: RemoteEmbedding = None):
-        self.es_conn = es_conn or ESConnection()
+    def __init__(self, es_conn: DocStoreConnection = None, emb_mdl: RemoteEmbedding = None):
+        self.es_conn = es_conn or get_doc_store()
         self.emb_mdl = emb_mdl
         self.graph = nx.DiGraph()  # 内存图
         self._entity_map = {}      # name -> Entity

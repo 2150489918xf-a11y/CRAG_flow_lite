@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from rag.app.chunking import chunk
 from rag.llm.embedding import RemoteEmbedding
-from rag.utils.es_conn import ESConnection
+from rag.utils.doc_store_conn import get_doc_store
 from rag.nlp.search import index_name
 from rag.settings import get_embedding_config, get_rag_config, get_config
 
@@ -38,7 +38,7 @@ def build_index(kb_id, docs_dir, lang="Chinese", enable_graph=True):
     logger.info(f"GraphRAG: {'启用' if enable_graph else '关闭'}")
 
     # 1. 连接 ES 并创建索引
-    es_conn = ESConnection()
+    es_conn = get_doc_store()
     idx = index_name(kb_id)
     es_conn.create_idx(idx)
     logger.info(f"ES 索引就绪: {idx}")
