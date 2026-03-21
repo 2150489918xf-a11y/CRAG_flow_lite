@@ -94,7 +94,17 @@ class BaseReranker(ABC):
 
 
 # ══════════════════════════════════════════
-#  工厂函数
+#  工厂函数 (注册器驱动)
+#
+#  切换后端只需:
+#    1. 实现 ABC 子类并 @registry.register("backend_name")
+#    2. 在 service_conf.yaml 设置 backend: backend_name
+#
+#  例:
+#    llm:
+#      backend: anthropic   # 切换 Chat 后端
+#    embedding:
+#      backend: local       # 切换 Embedding 后端
 # ══════════════════════════════════════════
 
 _chat_instance: Optional[BaseChatClient] = None
@@ -103,47 +113,83 @@ _reranker_instance: Optional[BaseReranker] = None
 
 
 def get_chat_client(**kwargs) -> BaseChatClient:
-    """获取 Chat 客户端单例。当前默认实现为 OpenAI 兼容协议。"""
+    """
+    获取 Chat 客户端单例。
+    通过 service_conf.yaml 的 llm.backend 配置切换后端 (默认 "openai")。
+    """
     global _chat_instance
     if _chat_instance is not None:
         return _chat_instance
-    from rag.llm.chat import ChatClient
-    _chat_instance = ChatClient(**kwargs)
-    logger.info("ChatClient initialized (OpenAI-compatible)")
+
+    from common.registry import chat_registry
+    from rag.settings import get_config
+
+    # 确保内置后端已注册
+    import rag.llm.chat  # noqa: F401
+
+    cfg = get_config().get("llm", {})
+    backend = cfg.get("backend", "openai")
+
+    _chat_instance = chat_registry.create(backend, **kwargs)
+    logger.info(f"ChatClient initialized: backend={backend}")
     return _chat_instance
 
 
 def get_embedding(**kwargs) -> BaseEmbedding:
-    """获取 Embedding 模型单例。"""
+    """
+    获取 Embedding 模型单例。
+    通过 service_conf.yaml 的 embedding.backend 配置切换后端 (默认 "openai")。
+    """
     global _emb_instance
     if _emb_instance is not None:
         return _emb_instance
+
+    from common.registry import embedding_registry
     from rag.settings import get_embedding_config
+
+    # 确保内置后端已注册
+    import rag.llm.embedding  # noqa: F401
+
     cfg = get_embedding_config()
-    from rag.llm.embedding import RemoteEmbedding
-    _emb_instance = RemoteEmbedding(
-        api_key=kwargs.get("api_key", cfg["api_key"]),
-        model_name=kwargs.get("model_name", cfg["model_name"]),
+    backend = cfg.get("backend", "openai")
+
+    _emb_instance = embedding_registry.create(
+        backend,
+        api_key=kwargs.get("api_key", cfg.get("api_key", "")),
+        model_name=kwargs.get("model_name", cfg.get("model_name", "")),
         base_url=kwargs.get("base_url", cfg.get("base_url", "")),
     )
-    logger.info(f"Embedding initialized: {_emb_instance.model_name}")
+    logger.info(f"Embedding initialized: backend={backend}, model={getattr(_emb_instance, 'model_name', 'N/A')}")
     return _emb_instance
 
 
 def get_reranker(**kwargs) -> Optional[BaseReranker]:
-    """获取 Reranker 模型单例。如未启用则返回 None。"""
+    """
+    获取 Reranker 模型单例。
+    通过 service_conf.yaml 的 reranker.backend 配置切换后端 (默认 "remote")。
+    如未启用则返回 None。
+    """
     global _reranker_instance
     if _reranker_instance is not None:
         return _reranker_instance
+
+    from common.registry import reranker_registry
     from rag.settings import get_config
+
+    # 确保内置后端已注册
+    import rag.llm.reranker  # noqa: F401
+
     cfg = get_config().get("reranker", {})
     if not cfg.get("enabled", False):
         return None
-    from rag.llm.reranker import RemoteReranker
-    _reranker_instance = RemoteReranker(
+
+    backend = cfg.get("backend", "remote")
+
+    _reranker_instance = reranker_registry.create(
+        backend,
         api_key=kwargs.get("api_key", cfg.get("api_key", "")),
         model_name=kwargs.get("model_name", cfg.get("model_name", "BAAI/bge-reranker-v2-m3")),
         base_url=kwargs.get("base_url", cfg.get("base_url", "")),
     )
-    logger.info(f"Reranker initialized: {_reranker_instance.model_name}")
+    logger.info(f"Reranker initialized: backend={backend}, model={getattr(_reranker_instance, 'model_name', 'N/A')}")
     return _reranker_instance
