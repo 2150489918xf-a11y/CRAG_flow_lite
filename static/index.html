@@ -125,14 +125,6 @@
                     </div>
                 </div>
 
-                <!-- Search Box -->
-                <div class="search-box">
-                    <input type="text" id="searchInput" placeholder="输入你的问题..." onkeydown="if(event.key==='Enter')doSearch()">
-                    <button class="btn btn-primary" id="searchBtn" onclick="doSearch()">
-                        🔍 检索
-                    </button>
-                </div>
-
                 <!-- Multi-KB Selector -->
                 <div class="kb-selector collapsed" id="kbSelector">
                     <div class="kb-selector-header" onclick="toggleKBSelector()">
@@ -150,6 +142,14 @@
                             <span class="kb-chip-empty">请先创建知识库</span>
                         </div>
                     </div>
+                </div>
+
+                <!-- Search Box -->
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="输入你的问题..." onkeydown="if(event.key==='Enter')doSearch()">
+                    <button class="btn btn-primary" id="searchBtn" onclick="doSearch()">
+                        🔍 检索
+                    </button>
                 </div>
 
                 <!-- Parameter Panel -->

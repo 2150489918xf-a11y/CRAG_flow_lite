@@ -519,15 +519,25 @@ function renderHistory() {
     const tags = document.getElementById('historyTags');
     if (history.length === 0) { panel.style.display = 'none'; return; }
     panel.style.display = 'block';
-    tags.innerHTML = history.map(q =>
-        `<span class="history-tag" onclick="useHistory('${escapeHtml(q).replace(/'/g, "\\'")}')"
-              title="${escapeHtml(q)}">${escapeHtml(q)}</span>`
-    ).join('');
+    tags.innerHTML = history.map((q, i) => {
+        const escaped = escapeHtml(q).replace(/'/g, "\\'");
+        return `<span class="history-tag" title="${escapeHtml(q)}">
+            <span class="history-tag-text" onclick="useHistory('${escaped}')">${escapeHtml(q)}</span>
+            <span class="history-tag-delete" onclick="event.stopPropagation();removeHistory(${i})" title="删除">✕</span>
+        </span>`;
+    }).join('');
 }
 
 function useHistory(query) {
     document.getElementById('searchInput').value = query;
     doSearch();
+}
+
+function removeHistory(index) {
+    let history = getHistory();
+    history.splice(index, 1);
+    localStorage.setItem('ragflow_history', JSON.stringify(history));
+    renderHistory();
 }
 
 function clearHistory() {

@@ -903,18 +903,43 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 }
 
 .history-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     font-size: 12px;
-    padding: 4px 10px;
+    padding: 4px 8px 4px 10px;
     background: var(--bg-glass);
     border: 1px solid var(--border);
     border-radius: 16px;
     color: var(--text-secondary);
-    cursor: pointer;
     transition: all 0.2s;
     max-width: 200px;
+}
+
+.history-tag-text {
+    cursor: pointer;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.history-tag-delete {
+    cursor: pointer;
+    font-size: 10px;
+    color: var(--text-muted);
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.history-tag-delete:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
 }
 
 .history-tag:hover {
