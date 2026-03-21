@@ -6,13 +6,13 @@ import json
 import os
 import re
 
-from rag.settings import get_project_base_directory
+from common.paths import NLP_RES_DIR
 
 
 class Dealer:
     def __init__(self):
         self.dictionary = {}
-        path = os.path.join(get_project_base_directory(), "res", "synonym.json")
+        path = NLP_RES_DIR / "synonym.json"
         try:
             if os.path.exists(path):
                 with open(path, 'r', encoding='utf-8') as f:

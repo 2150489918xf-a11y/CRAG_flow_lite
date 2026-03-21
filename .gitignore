@@ -39,6 +39,9 @@ Thumbs.db
 /data/
 *.onnx
 
+# Runtime generated
+conf/folders.json
+
 # Test artifacts
 test_doc.pdf
 dummy_*.txt

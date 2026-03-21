@@ -10,7 +10,7 @@ import os
 
 import numpy as np
 from rag.nlp import tokenizer as rag_tokenizer_module
-from rag.settings import get_project_base_directory
+from common.paths import NLP_RES_DIR
 
 rag_tokenizer = rag_tokenizer_module
 
@@ -26,9 +26,8 @@ class Dealer:
         self.ne = {}
         self.df = {}
 
-        res_dir = os.path.join(get_project_base_directory(), "res")
         try:
-            ner_path = os.path.join(res_dir, "ner.json")
+            ner_path = NLP_RES_DIR / "ner.json"
             if os.path.exists(ner_path):
                 with open(ner_path, "r", encoding="utf-8") as f:
                     self.ne = json.load(f)
