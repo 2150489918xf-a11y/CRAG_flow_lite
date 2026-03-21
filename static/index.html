@@ -1194,6 +1194,11 @@
                     <input type="text" id="kbNameInput" placeholder="输入知识库名称...">
                     <button class="btn btn-primary" onclick="createKB()">创建</button>
                 </div>
+                <div style="margin-bottom:8px">
+                    <select id="folderFilter" onchange="loadKBs()" style="padding:6px 10px;font-size:12px">
+                        <option value="">📁 全部文件夹</option>
+                    </select>
+                </div>
                 <div class="kb-toolbar" id="kbToolbar" style="display:none">
                     <label class="kb-select-all">
                         <input type="checkbox" id="kbSelectAll" onchange="toggleKBSelectAll()">
@@ -1241,6 +1246,19 @@
                     <div>🏆 <b>Reranker:</b> BGE-Reranker-v2-m3</div>
                     <div>🔗 <b>Graph:</b> NetworkX + PageRank</div>
                     <div>🧠 <b>CRAG:</b> 三态动态路由</div>
+                </div>
+            </div>
+
+            <!-- Agent Tool API -->
+            <div class="card" style="padding:16px">
+                <div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:10px">🤖 Agent Tool API</div>
+                <div style="font-size:12px;color:var(--text-muted);line-height:1.8">
+                    <div><b>Schema:</b> <a href="/api/tool/schema" target="_blank" style="color:var(--accent)">/api/tool/schema</a></div>
+                    <div><b>List KBs:</b> <a href="/api/tool/list_kbs" target="_blank" style="color:var(--accent)">/api/tool/list_kbs</a></div>
+                    <div><b>Retrieve:</b> POST /api/tool/retrieve</div>
+                    <div style="margin-top:6px;font-size:11px;color:var(--text-muted)">
+                        支持 fast / hybrid / deep 三种检索模式<br>返回 OpenAI Function Calling 兼容 Schema
+                    </div>
                 </div>
             </div>
         </div>
@@ -1424,11 +1442,24 @@ let kbDisplayNames = {};
 
 async function loadKBs() {
     try {
-        const r = await fetch(`${API}/api/knowledgebase`);
+        const folderFilter = document.getElementById('folderFilter');
+        const selectedFolder = folderFilter ? folderFilter.value : '';
+        const url = selectedFolder ? `${API}/api/knowledgebase?folder=${encodeURIComponent(selectedFolder)}` : `${API}/api/knowledgebase`;
+        const r = await fetch(url);
         const raw = await r.json();
         const d = unwrap(raw) || {};
         const list = document.getElementById('kbList');
         const kbs = d.knowledgebases || [];
+
+        // Populate folder dropdown (only on full load, not filtered)
+        if (!selectedFolder && folderFilter) {
+            const folders = new Set();
+            kbs.forEach(kb => { if (kb.folder && kb.folder !== '/') folders.add(kb.folder); });
+            const prevVal = folderFilter.value;
+            folderFilter.innerHTML = '<option value="">📁 全部文件夹</option>' +
+                Array.from(folders).sort().map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('');
+            folderFilter.value = prevVal;
+        }
 
         if (kbs.length === 0) {
             list.innerHTML = '<li class="empty-state" style="padding:20px"><span style="color:var(--text-muted)">暂无知识库，请先创建</span></li>';
@@ -1443,13 +1474,12 @@ async function loadKBs() {
             kbDisplayNames[kb.kb_id] = kb.display_name || kb.kb_id;
         });
 
-        // Clean up checked set: remove any IDs no longer in the list
+        // Clean up checked set
         const currentKBIds = new Set(kbs.map(kb => kb.kb_id));
         for (const id of kbCheckedSet) {
             if (!currentKBIds.has(id)) kbCheckedSet.delete(id);
         }
 
-        // Show batch toggle button (toolbar only visible in batch mode)
         document.getElementById('kbBatchToggle').style.display = 'inline-flex';
         if (!kbBatchMode) {
             document.getElementById('kbToolbar').style.display = 'none';
@@ -1457,12 +1487,13 @@ async function loadKBs() {
 
         list.innerHTML = kbs.map(kb => {
             const name = escapeHtml(kb.display_name || kb.kb_id);
+            const folder = kb.folder && kb.folder !== '/' ? `<span style="font-size:10px;color:var(--text-muted);margin-left:4px">${escapeHtml(kb.folder)}</span>` : '';
             const checked = kbCheckedSet.has(kb.kb_id) ? 'checked' : '';
             return `
             <li class="kb-item ${selectedKB === kb.kb_id ? 'active' : ''}"
                 data-kbid="${kb.kb_id}">
                 <input type="checkbox" class="kb-checkbox" data-action="check" ${checked}>
-                <span class="name">📂 ${name}</span>
+                <span class="name">📂 ${name}${folder}</span>
                 <span class="count">${kb.doc_count} 条</span>
                 <button class="browse-btn" data-action="browse" title="浏览分块">🔎</button>
                 <button class="delete-btn" data-action="delete" title="删除">✕</button>
