@@ -8,10 +8,22 @@ from pydantic import BaseModel
 class KnowledgeBaseCreate(BaseModel):
     kb_id: str
     description: str = ""
+    folder: str = "/"
 
 
 class BatchDeleteRequest(BaseModel):
     kb_ids: list[str]
+
+
+class KBMoveRequest(BaseModel):
+    """移动知识库到目标文件夹"""
+    kb_id: str
+    target_folder: str
+
+
+class FolderCreateRequest(BaseModel):
+    """创建文件夹"""
+    path: str  # e.g. "/财务/政策法规"
 
 
 class RetrievalRequest(BaseModel):

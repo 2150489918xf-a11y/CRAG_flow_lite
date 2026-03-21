@@ -45,8 +45,8 @@ class ESConnection(DocStoreConnection):
         """检查 ES 健康状态"""
         return self.es.cluster.health()
 
-    def create_idx(self, index_name, mapping_path=None, display_name=None):
-        """创建索引，可选存储显示名称到 _meta"""
+    def create_idx(self, index_name, mapping_path=None, display_name=None, folder="/"):
+        """创建索引，可选存储显示名称和文件夹路径到 _meta"""
         if self.es.indices.exists(index=index_name):
             return True
 
@@ -56,16 +56,17 @@ class ESConnection(DocStoreConnection):
         with open(mapping_path, "r") as f:
             mapping = json.load(f)
 
-        # Store display name in _meta for Chinese name support
+        # Store metadata in _meta
+        if "mappings" not in mapping:
+            mapping["mappings"] = {}
+        if "_meta" not in mapping["mappings"]:
+            mapping["mappings"]["_meta"] = {}
         if display_name:
-            if "mappings" not in mapping:
-                mapping["mappings"] = {}
-            if "_meta" not in mapping["mappings"]:
-                mapping["mappings"]["_meta"] = {}
             mapping["mappings"]["_meta"]["display_name"] = display_name
+        mapping["mappings"]["_meta"]["folder"] = folder
 
         self.es.indices.create(index=index_name, body=mapping)
-        logger.info(f"Created index: {index_name} (display: {display_name or index_name})")
+        logger.info(f"Created index: {index_name} (display: {display_name or index_name}, folder: {folder})")
         return True
 
     def delete_idx(self, index_name):
@@ -81,12 +82,22 @@ class ESConnection(DocStoreConnection):
         return self.es.indices.exists(index=index_name)
 
     def get_index_meta(self, index_name):
-        """获取索引的 _meta 信息（包含 display_name 等）"""
+        """获取索引的 _meta 信息（包含 display_name, folder 等）"""
         try:
             mapping = self.es.indices.get_mapping(index=index_name)
             return mapping.get(index_name, {}).get("mappings", {}).get("_meta", {})
         except Exception:
             return {}
+
+    def update_index_meta(self, index_name, **meta_fields):
+        """更新索引的 _meta 信息（增量合并）"""
+        current = self.get_index_meta(index_name)
+        current.update(meta_fields)
+        self.es.indices.put_mapping(
+            index=index_name,
+            body={"_meta": current},
+        )
+        logger.info(f"Updated _meta for {index_name}: {meta_fields}")
 
     def search(self, select_fields, highlight_fields, condition, match_expressions,
                offset, limit, index_names, rank_feature=None, exclude_parent=False):
