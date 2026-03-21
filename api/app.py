@@ -9,7 +9,8 @@ os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 import sys
 
 # 确保项目根目录在 Python 路径中
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # ── 日志初始化（必须在所有 import 之前）──
 from common.log_config import setup_logging
@@ -19,14 +20,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
+from common.paths import STATIC_DIR
 
 app = FastAPI(title="RAGFlow Lite", version="0.5.0",
               description="轻量化 RAG 检索服务 (混合检索 + GraphRAG + CRAG)")
 
 # 挂载静态前端文件
-_static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
-if os.path.isdir(_static_dir):
-    app.mount("/static", StaticFiles(directory=_static_dir, html=True), name="static")
+if STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
 
 app.add_middleware(
     CORSMiddleware,

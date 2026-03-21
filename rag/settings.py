@@ -10,9 +10,9 @@ from typing import Optional
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-logger = logging.getLogger(__name__)
+from common.paths import PROJECT_ROOT, CONF_DIR
 
-_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+logger = logging.getLogger(__name__)
 
 
 # ══════════════════════════════════════════
@@ -116,8 +116,8 @@ def _load_and_validate() -> ServiceConfig:
     if _service_config is not None:
         return _service_config
 
-    conf_path = os.path.join(_BASE_DIR, "conf", "service_conf.yaml")
-    if not os.path.exists(conf_path):
+    conf_path = CONF_DIR / "service_conf.yaml"
+    if not conf_path.exists():
         raise FileNotFoundError(f"配置文件不存在: {conf_path}")
 
     with open(conf_path, "r", encoding="utf-8") as f:
@@ -140,7 +140,7 @@ def _load_and_validate() -> ServiceConfig:
 
 def get_project_base_directory():
     """返回项目根目录"""
-    return _BASE_DIR
+    return str(PROJECT_ROOT)
 
 
 def get_config() -> dict:

@@ -13,7 +13,8 @@ import sys
 import time
 
 # 确保项目根目录在 Python 路径中
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from rag.app.chunking import chunk
 from rag.llm.base import get_embedding, get_chat_client
@@ -161,8 +162,8 @@ def _build_graph(kb_id, idx, chunks, es_conn, emb_mdl):
     logger.info(f"写入 {count} 条图谱文档到 ES")
 
     # Step 4: 保存 NetworkX 图到文件（用于在线 N 跳遍历）
-    graph_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                              "data", "graphs")
+    from common.paths import GRAPH_DIR
+    graph_dir = str(GRAPH_DIR)
     os.makedirs(graph_dir, exist_ok=True)
     graph_path = os.path.join(graph_dir, f"{kb_id}_graph.json")
     graph_store.save_graph(graph_path)

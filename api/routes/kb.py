@@ -22,10 +22,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["知识库管理"])
 
 # ── 文件夹元数据存储路径 ──
-_FOLDERS_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "conf", "folders.json",
-)
+from common.paths import CONF_DIR
+_FOLDERS_FILE = str(CONF_DIR / "folders.json")
 
 
 def _normalize_folder(path: str) -> str:
