@@ -115,27 +115,35 @@ class TestGraphSearchFormat:
 
 
 class TestAbstractInterfaces:
-    """抽象接口合规性测试"""
+    """抽象接口 + 注册器合规性测试"""
 
     def test_chat_client_is_abc(self):
         from rag.llm.base import BaseChatClient
-        from rag.llm.chat import ChatClient
-        assert issubclass(ChatClient, BaseChatClient)
+        from common.registry import chat_registry
+        import rag.llm.chat  # noqa: F401 — trigger registration
+        cls = chat_registry.get("openai")
+        assert issubclass(cls, BaseChatClient)
 
     def test_embedding_is_abc(self):
         from rag.llm.base import BaseEmbedding
-        from rag.llm.embedding import RemoteEmbedding
-        assert issubclass(RemoteEmbedding, BaseEmbedding)
+        from common.registry import embedding_registry
+        import rag.llm.embedding  # noqa: F401
+        cls = embedding_registry.get("openai")
+        assert issubclass(cls, BaseEmbedding)
 
     def test_reranker_is_abc(self):
         from rag.llm.base import BaseReranker
-        from rag.llm.reranker import RemoteReranker
-        assert issubclass(RemoteReranker, BaseReranker)
+        from common.registry import reranker_registry
+        import rag.llm.reranker  # noqa: F401
+        cls = reranker_registry.get("remote")
+        assert issubclass(cls, BaseReranker)
 
     def test_doc_store_is_abc(self):
         from rag.utils.doc_store_conn import DocStoreConnection
-        from rag.utils.es_conn import ESConnection
-        assert issubclass(ESConnection, DocStoreConnection)
+        from common.registry import doc_store_registry
+        import rag.utils.es_conn  # noqa: F401
+        cls = doc_store_registry.get("elasticsearch")
+        assert issubclass(cls, DocStoreConnection)
 
 
 class TestConfig:
