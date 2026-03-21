@@ -107,7 +107,23 @@
         <!-- Main Content -->
         <div>
             <div class="card">
-                <div class="card-title"><span class="icon">🔍</span> 智能检索</div>
+                <div class="card-title">
+                    <span><span class="icon">🔍</span> 智能检索</span>
+                    <div class="options-row">
+                        <div class="toggle-option active" id="toggleGraph" onclick="toggleOpt(this)">
+                            <span class="dot"></span> GraphRAG
+                        </div>
+                        <div class="toggle-option active" id="toggleCRAG" onclick="toggleOpt(this)">
+                            <span class="dot"></span> CRAG
+                        </div>
+                        <div class="toggle-option active" id="toggleReranker" onclick="toggleOpt(this)">
+                            <span class="dot"></span> Reranker
+                        </div>
+                        <div class="toggle-option" id="toggleParams" onclick="toggleParamPanel()">
+                            <span class="dot"></span> ⚙️
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Search Box -->
                 <div class="search-box">
@@ -133,22 +149,6 @@
                         <div class="kb-chips" id="searchKBChips">
                             <span class="kb-chip-empty">请先创建知识库</span>
                         </div>
-                    </div>
-                </div>
-
-                <!-- Options -->
-                <div class="options-row">
-                    <div class="toggle-option active" id="toggleGraph" onclick="toggleOpt(this)">
-                        <span class="dot"></span> GraphRAG 图谱
-                    </div>
-                    <div class="toggle-option active" id="toggleCRAG" onclick="toggleOpt(this)">
-                        <span class="dot"></span> CRAG 纠错
-                    </div>
-                    <div class="toggle-option active" id="toggleReranker" onclick="toggleOpt(this)">
-                        <span class="dot"></span> Reranker 精排
-                    </div>
-                    <div class="toggle-option" id="toggleParams" onclick="toggleParamPanel()">
-                        <span class="dot"></span> ⚙️ 参数
                     </div>
                 </div>
 

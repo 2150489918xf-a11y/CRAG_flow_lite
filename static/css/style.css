@@ -138,7 +138,9 @@ body::before {
     margin-bottom: 16px;
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
+    flex-wrap: wrap;
 }
 
 .card-title .icon { font-size: 18px; }
@@ -597,21 +599,21 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 /* Options row */
 .options-row {
     display: flex;
-    gap: 12px;
-    margin-bottom: 20px;
+    gap: 8px;
     flex-wrap: wrap;
+    align-items: center;
 }
 
 .toggle-option {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
+    gap: 5px;
+    padding: 4px 10px;
     background: var(--bg-glass);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 6px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 11px;
     transition: all 0.2s;
     user-select: none;
 }
