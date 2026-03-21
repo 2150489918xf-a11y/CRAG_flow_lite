@@ -22,40 +22,40 @@
 ```
 ┌─────────────────────────────────────────────────────┐
 │  api/app.py  (入口壳 ~70 行)                         │
-│  ├── routes/kb.py      知识库 CRUD + 文件夹管理       │
-│  ├── routes/doc.py     文档上传/管理                   │
-│  ├── routes/search.py  混合检索 + GraphRAG + CRAG     │
-│  └── routes/tool.py    Agent Tool API (外部调用接口)   │
+│  ├── routes/kb.py      知识库 CRUD + 文件夹管理      │
+│  ├── routes/doc.py     文档上传/管理                 │
+│  ├── routes/search.py  混合检索 + GraphRAG + CRAG    │
+│  └── routes/tool.py    Agent Tool API (外部调用接口) │
 ├─────────────────────────────────────────────────────┤
-│  deps.py               共享依赖注入 (单例工厂)         │
-│  models.py             Pydantic 请求/响应模型          │
+│  deps.py               共享依赖注入 (单例工厂)        │
+│  models.py             Pydantic 请求/响应模型        │
 ├─────────────────────────────────────────────────────┤
-│  common/registry.py    统一插件注册器                   │
-│  common/perf.py        性能监控                        │
+│  common/registry.py    统一插件注册器                │
+│  common/perf.py        性能监控                      │
 ├─────────────────────────────────────────────────────┤
-│  rag/llm/              LLM 抽象层 (ABC + Registry)    │
-│  ├── base.py           BaseChatClient / BaseEmbedding │
-│  │                     / BaseReranker (ABC + 工厂)    │
-│  ├── chat.py           OpenAI 兼容 Chat 实现           │
-│  ├── embedding.py      远程 Embedding 实现             │
-│  └── reranker.py       远程 Reranker 实现              │
+│  rag/llm/              LLM 抽象层 (ABC + Registry)   │
+│  ├── base.py           BaseChatClient / BaseEmbedding│
+│  │                     / BaseReranker (ABC + 工厂)   │
+│  ├── chat.py           OpenAI 兼容 Chat 实现         │
+│  ├── embedding.py      远程 Embedding 实现           │
+│  └── reranker.py       远程 Reranker 实现            │
 ├─────────────────────────────────────────────────────┤
-│  rag/utils/            存储抽象层 (ABC + Registry)     │
+│  rag/utils/            存储抽象层 (ABC + Registry)   │
 │  ├── doc_store_conn.py DocStoreConnection (18 抽象方法)│
-│  └── es_conn.py        Elasticsearch 实现              │
+│  └── es_conn.py        Elasticsearch 实现            │
 ├─────────────────────────────────────────────────────┤
-│  rag/parser/           文档解析器 (ABC + Registry)     │
-│  ├── base.py           BaseParser 抽象基类             │
-│  └── pdf|docx|excel|…  8 种格式解析器                  │
+│  rag/parser/           文档解析器 (ABC + Registry)   │
+│  ├── base.py           BaseParser 抽象基类           │
+│  └── pdf|docx|excel|…  8 种格式解析器                │
 ├─────────────────────────────────────────────────────┤
-│  rag/app/              分块引擎 (ABC + Registry)      │
-│  ├── base_chunker.py   BaseChunker 抽象基类            │
-│  ├── chunking.py       Router 工厂                    │
-│  └── naive|qa|laws|…   9 种策略脚本                    │
+│  rag/app/              分块引擎 (ABC + Registry)     │
+│  ├── base_chunker.py   BaseChunker 抽象基类          │
+│  ├── chunking.py       Router 工厂                   │
+│  └── naive|qa|laws|…   9 种策略脚本                  │
 ├─────────────────────────────────────────────────────┤
-│  rag/graph/            GraphRAG (提取/存储/检索)        │
-│  rag/crag/             CRAG (评估/路由/提炼/Web搜索)    │
-│  deepdoc/              视觉引擎 (版面分析/OCR/表格识别)  │
+│  rag/graph/            GraphRAG (提取/存储/检索)     │
+│  rag/crag/             CRAG (评估/路由/提炼/Web搜索) │
+│  deepdoc/              视觉引擎 (版面分析/OCR/表格识别)│
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -133,7 +133,7 @@ uvicorn api.app:app --host 0.0.0.0 --port 9380 --reload
 
 ## 📡 API 端点 (26 routes)
 
-启动后访问 http://localhost:9380/docs 查看 Swagger 文档。
+启动后访问 <http://localhost:9380/docs> 查看 Swagger 文档。
 
 ### 知识库管理
 

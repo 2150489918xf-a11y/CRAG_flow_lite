@@ -175,16 +175,6 @@ async def list_knowledgebases(folder: str = None):
         raise ExternalServiceError("Elasticsearch", str(e))
 
 
-@router.delete("/knowledgebase/{kb_id}")
-async def delete_knowledgebase(kb_id: str):
-    """删除知识库"""
-    es = get_es()
-    idx = index_name(kb_id)
-    if es.delete_idx(idx):
-        return ok_response({"kb_id": kb_id}, message="deleted")
-    raise NotFoundError("知识库", kb_id)
-
-
 @router.post("/knowledgebase/batch_delete")
 async def batch_delete_knowledgebases(req: BatchDeleteRequest):
     """批量删除知识库"""
@@ -215,6 +205,7 @@ async def batch_delete_knowledgebases(req: BatchDeleteRequest):
         "failed": failed_count,
         "results": results,
     })
+
 
 
 # ══════════════════════════════════════════
@@ -349,6 +340,17 @@ async def get_folder_tree():
     tree = build_tree("/")
 
     return ok_response({"tree": tree})
+
+
+# ⚠️ {kb_id} 通配路由必须放在所有 /knowledgebase/xxx 具名路由之后
+@router.delete("/knowledgebase/{kb_id}")
+async def delete_knowledgebase(kb_id: str):
+    """删除知识库"""
+    es = get_es()
+    idx = index_name(kb_id)
+    if es.delete_idx(idx):
+        return ok_response({"kb_id": kb_id}, message="deleted")
+    raise NotFoundError("知识库", kb_id)
 
 
 # ══════════════════════════════════════════
