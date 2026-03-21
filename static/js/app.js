@@ -351,6 +351,18 @@ async function uploadFiles(files) {
 }
 
 // ==================== Multi-KB Search Selection ====================
+function toggleKBSelector() {
+    const el = document.getElementById('kbSelector');
+    el.classList.toggle('collapsed');
+}
+
+function updateKBSummary() {
+    const summary = document.getElementById('kbSelectedSummary');
+    if (!summary) return;
+    const n = searchKBSet.size;
+    summary.textContent = n > 0 ? `(已选 ${n} 个)` : '';
+}
+
 function renderSearchKBChips(kbs) {
     const container = document.getElementById('searchKBChips');
     const selectAllBtn = document.getElementById('searchKBSelectAll');
@@ -386,6 +398,7 @@ function renderSearchKBChips(kbs) {
     const allSelected = searchKBSet.size === kbs.length;
     selectAllBtn.style.display = allSelected ? 'none' : 'inline-block';
     clearAllBtn.style.display = searchKBSet.size > 0 ? 'inline-block' : 'none';
+    updateKBSummary();
 }
 
 function toggleSearchKB(kbId) {
@@ -404,6 +417,7 @@ function toggleSearchKB(kbId) {
     const allSelected = searchKBSet.size === totalChips;
     document.getElementById('searchKBSelectAll').style.display = allSelected ? 'none' : 'inline-block';
     document.getElementById('searchKBClearAll').style.display = searchKBSet.size > 0 ? 'inline-block' : 'none';
+    updateKBSummary();
 }
 
 function toggleSearchKBAll() {
@@ -415,6 +429,7 @@ function toggleSearchKBAll() {
     document.getElementById('searchKBSelectAll').style.display = 'none';
     document.getElementById('searchKBClearAll').style.display = 'inline-block';
     toast(`已选择全部 ${searchKBSet.size} 个知识库`, 'info');
+    updateKBSummary();
 }
 
 function clearSearchKBAll() {
@@ -425,6 +440,7 @@ function clearSearchKBAll() {
     document.getElementById('searchKBSelectAll').style.display = 'inline-block';
     document.getElementById('searchKBClearAll').style.display = 'none';
     toast('已清空检索范围', 'info');
+    updateKBSummary();
 }
 
 // ==================== Search ====================

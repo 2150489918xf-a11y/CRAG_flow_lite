@@ -118,16 +118,21 @@
                 </div>
 
                 <!-- Multi-KB Selector -->
-                <div class="kb-selector">
-                    <div class="kb-selector-header">
-                        <span class="kb-selector-label">📚 检索范围</span>
-                        <div class="kb-selector-actions">
-                            <button class="kb-select-all-btn" id="searchKBSelectAll" onclick="toggleSearchKBAll()">全选</button>
-                            <button class="kb-select-all-btn" id="searchKBClearAll" onclick="clearSearchKBAll()" style="display:none">清空</button>
+                <div class="kb-selector collapsed" id="kbSelector">
+                    <div class="kb-selector-header" onclick="toggleKBSelector()">
+                        <span class="kb-selector-label">📚 检索范围 <span class="kb-selected-summary" id="kbSelectedSummary"></span></span>
+                        <div class="kb-selector-right">
+                            <div class="kb-selector-actions" id="kbSelectorActions">
+                                <button class="kb-select-all-btn" id="searchKBSelectAll" onclick="event.stopPropagation();toggleSearchKBAll()">全选</button>
+                                <button class="kb-select-all-btn" id="searchKBClearAll" onclick="event.stopPropagation();clearSearchKBAll()" style="display:none">清空</button>
+                            </div>
+                            <span class="kb-selector-arrow">▾</span>
                         </div>
                     </div>
-                    <div class="kb-chips" id="searchKBChips">
-                        <span class="kb-chip-empty">请先创建知识库</span>
+                    <div class="kb-selector-body" id="kbSelectorBody">
+                        <div class="kb-chips" id="searchKBChips">
+                            <span class="kb-chip-empty">请先创建知识库</span>
+                        </div>
                     </div>
                 </div>
 
