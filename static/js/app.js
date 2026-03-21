@@ -1,5 +1,6 @@
 const API = '';
 let selectedKB = null;
+let searchKBSet = new Set(); // Multi-KB search selection
 
 // Helper: unwrap unified {code, message, data} response
 function unwrap(resp) {
@@ -97,6 +98,7 @@ async function loadKBs() {
         `}).join('');
 
         updateKBBatchUI(kbs.length);
+        renderSearchKBChips(kbs);
 
         // Event delegation for KB list
         list.onclick = function(e) {
@@ -144,6 +146,8 @@ async function createKB() {
 
 function selectKB(id) {
     selectedKB = id;
+    // Also add to search selection
+    searchKBSet.add(id);
     loadKBs();
     const name = kbDisplayNames[id] || id;
     toast(`已选择知识库: ${name}`, 'info');
@@ -346,6 +350,83 @@ async function uploadFiles(files) {
     loadKBs();
 }
 
+// ==================== Multi-KB Search Selection ====================
+function renderSearchKBChips(kbs) {
+    const container = document.getElementById('searchKBChips');
+    const selectAllBtn = document.getElementById('searchKBSelectAll');
+    const clearAllBtn = document.getElementById('searchKBClearAll');
+    if (!container) return;
+
+    // Clean up stale IDs
+    const currentIds = new Set(kbs.map(kb => kb.kb_id));
+    for (const id of searchKBSet) {
+        if (!currentIds.has(id)) searchKBSet.delete(id);
+    }
+
+    if (kbs.length === 0) {
+        container.innerHTML = '<span class="kb-chip-empty">请先创建知识库</span>';
+        selectAllBtn.style.display = 'none';
+        clearAllBtn.style.display = 'none';
+        return;
+    }
+
+    container.innerHTML = kbs.map(kb => {
+        const name = escapeHtml(kb.display_name || kb.kb_id);
+        const isSelected = searchKBSet.has(kb.kb_id);
+        return `<span class="kb-chip ${isSelected ? 'active' : ''}" 
+                      data-kbid="${kb.kb_id}" 
+                      onclick="toggleSearchKB('${kb.kb_id}')" 
+                      title="${name} (${kb.doc_count} 条)">
+                    📂 ${name}
+                    <span class="kb-chip-count">${kb.doc_count}</span>
+                </span>`;
+    }).join('');
+
+    // Toggle button visibility
+    const allSelected = searchKBSet.size === kbs.length;
+    selectAllBtn.style.display = allSelected ? 'none' : 'inline-block';
+    clearAllBtn.style.display = searchKBSet.size > 0 ? 'inline-block' : 'none';
+}
+
+function toggleSearchKB(kbId) {
+    if (searchKBSet.has(kbId)) {
+        searchKBSet.delete(kbId);
+    } else {
+        searchKBSet.add(kbId);
+    }
+    // Update chip active state without full reload
+    document.querySelectorAll('#searchKBChips .kb-chip').forEach(chip => {
+        const id = chip.getAttribute('data-kbid');
+        chip.classList.toggle('active', searchKBSet.has(id));
+    });
+    // Update buttons
+    const totalChips = document.querySelectorAll('#searchKBChips .kb-chip').length;
+    const allSelected = searchKBSet.size === totalChips;
+    document.getElementById('searchKBSelectAll').style.display = allSelected ? 'none' : 'inline-block';
+    document.getElementById('searchKBClearAll').style.display = searchKBSet.size > 0 ? 'inline-block' : 'none';
+}
+
+function toggleSearchKBAll() {
+    document.querySelectorAll('#searchKBChips .kb-chip').forEach(chip => {
+        const id = chip.getAttribute('data-kbid');
+        searchKBSet.add(id);
+        chip.classList.add('active');
+    });
+    document.getElementById('searchKBSelectAll').style.display = 'none';
+    document.getElementById('searchKBClearAll').style.display = 'inline-block';
+    toast(`已选择全部 ${searchKBSet.size} 个知识库`, 'info');
+}
+
+function clearSearchKBAll() {
+    searchKBSet.clear();
+    document.querySelectorAll('#searchKBChips .kb-chip').forEach(chip => {
+        chip.classList.remove('active');
+    });
+    document.getElementById('searchKBSelectAll').style.display = 'inline-block';
+    document.getElementById('searchKBClearAll').style.display = 'none';
+    toast('已清空检索范围', 'info');
+}
+
 // ==================== Search ====================
 function toggleOpt(el) { el.classList.toggle('active'); }
 
@@ -442,7 +523,7 @@ function clearHistory() {
 async function doSearch() {
     const q = document.getElementById('searchInput').value.trim();
     if (!q) return toast('请输入问题', 'error');
-    if (!selectedKB) return toast('请先选择一个知识库', 'error');
+    if (searchKBSet.size === 0) return toast('请先选择检索的知识库', 'error');
 
     addToHistory(q);
 
@@ -458,7 +539,7 @@ async function doSearch() {
 
     const body = {
         question: q,
-        kb_ids: [selectedKB],
+        kb_ids: Array.from(searchKBSet),
         top_k: searchParams.topK,
         similarity_threshold: searchParams.threshold,
         vector_similarity_weight: searchParams.vecWeight,
