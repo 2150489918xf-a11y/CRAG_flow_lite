@@ -46,10 +46,12 @@ register_request_logging(app)
 from api.routes.kb import router as kb_router
 from api.routes.doc import router as doc_router
 from api.routes.search import router as search_router
+from api.routes.tool import router as tool_router
 
 app.include_router(kb_router)
 app.include_router(doc_router)
 app.include_router(search_router)
+app.include_router(tool_router)
 
 
 @app.get("/")

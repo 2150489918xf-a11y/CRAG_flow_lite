@@ -66,3 +66,54 @@ class GraphRetrievalResponse(BaseModel):
     crag_reason: str = ""
     crag_action: str = ""
     crag_latency_ms: int = 0
+
+
+# ══════════════════════════════════════════
+#  Agent Tool API 模型
+# ══════════════════════════════════════════
+
+class ToolRetrieveRequest(BaseModel):
+    """
+    Agent 检索工具请求 — 极简入参
+
+    mode:
+      - "fast":   ES 混合检索 + Reranker (低延迟)
+      - "hybrid": fast + GraphRAG 图谱推理 (默认)
+      - "deep":   hybrid + CRAG 纠错路由 (最准但慢)
+    """
+    query: str
+    kb_ids: list[str] = []
+    top_k: int = 5
+    mode: str = "hybrid"
+
+
+class ToolSource(BaseModel):
+    """检索来源溯源"""
+    id: str
+    content: str
+    doc_name: str = ""
+    source_type: str = "local"  # "local" | "graph" | "web"
+    relevance_score: float = 0.0
+
+
+class ToolMetadata(BaseModel):
+    """检索元信息"""
+    mode: str
+    total_hits: int = 0
+    source_count: int = 0
+    latency_ms: int = 0
+    crag_score: str = ""
+    crag_reason: str = ""
+
+
+class ToolRetrieveResponse(BaseModel):
+    """
+    Agent 检索工具响应
+
+    answer_context: 拼装好的上下文文本，Agent 直接塞进 Prompt 即可
+    sources:        溯源列表，供 Agent 引用
+    metadata:       检索元信息
+    """
+    answer_context: str
+    sources: list[ToolSource]
+    metadata: ToolMetadata
