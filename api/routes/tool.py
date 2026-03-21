@@ -64,6 +64,10 @@ TOOL_SCHEMA = {
                     "description": "检索模式：fast=低延迟, hybrid=含图谱推理, deep=含CRAG纠错",
                     "default": "hybrid",
                 },
+                "folder": {
+                    "type": "string",
+                    "description": "按文件夹过滤知识库（如 '/财务'），留空则搜索全部",
+                },
             },
             "required": ["query"],
         },
@@ -95,6 +99,7 @@ async def list_kbs():
             kbs.append({
                 "kb_id": kb_id,
                 "display_name": meta.get("display_name", kb_id),
+                "folder": meta.get("folder", "/"),
                 "doc_count": count,
             })
         return ok_response({"knowledgebases": kbs})
@@ -121,13 +126,24 @@ async def tool_retrieve(req: ToolRetrieveRequest):
     if mode not in ("fast", "hybrid", "deep"):
         raise ValidationError(f"mode 必须为 fast/hybrid/deep，收到: {mode}")
 
-    # ── 自动发现知识库 ──
+    # ── 自动发现知识库 (支持文件夹过滤) ──
     kb_ids = req.kb_ids
     if not kb_ids:
         es = get_es()
         try:
             indices = es.list_indices()
-            kb_ids = [name.replace("ragflow_lite_", "") for name in indices.keys()]
+            if req.folder:
+                # 按文件夹前缀过滤
+                folder = req.folder.strip().rstrip("/")
+                if not folder.startswith("/"):
+                    folder = "/" + folder
+                for name in indices.keys():
+                    meta = es.get_index_meta(name)
+                    kb_folder = meta.get("folder", "/")
+                    if kb_folder == folder or kb_folder.startswith(folder + "/"):
+                        kb_ids.append(name.replace("ragflow_lite_", ""))
+            else:
+                kb_ids = [name.replace("ragflow_lite_", "") for name in indices.keys()]
         except Exception:
             kb_ids = []
     if not kb_ids:

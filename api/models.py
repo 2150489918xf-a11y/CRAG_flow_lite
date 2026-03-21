@@ -97,6 +97,7 @@ class ToolRetrieveRequest(BaseModel):
     kb_ids: list[str] = []
     top_k: int = 5
     mode: str = "hybrid"
+    folder: str = ""  # 按文件夹过滤 (如 "/财务")，留空搜全部
 
 
 class ToolSource(BaseModel):
