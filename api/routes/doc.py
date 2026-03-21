@@ -26,8 +26,8 @@ async def list_documents(kb_id: str):
         raise NotFoundError("知识库", kb_id)
 
     try:
-        r = es.es.search(
-            index=idx,
+        r = es.search_raw(
+            index_name=idx,
             body={
                 "size": 0,
                 "query": {
@@ -83,8 +83,8 @@ async def list_chunks(kb_id: str, page: int = 1, page_size: int = 20,
         query["bool"]["must"] = must
 
     try:
-        r = es.es.search(
-            index=idx,
+        r = es.search_raw(
+            index_name=idx,
             body={
                 "from": from_,
                 "size": page_size,
@@ -127,16 +127,14 @@ async def delete_document(kb_id: str, doc_name: str):
         raise NotFoundError("知识库", kb_id)
 
     try:
-        r = es.es.delete_by_query(
-            index=idx,
+        deleted = es.delete_by_query(
+            index_name=idx,
             body={
                 "query": {
                     "term": {"docnm_kwd": doc_name}
                 }
             },
-            refresh=True,
         )
-        deleted = r.get("deleted", 0)
         logger.info(f"Deleted {deleted} chunks for doc '{doc_name}' from kb '{kb_id}'")
         return ok_response({
             "deleted_chunks": deleted,
@@ -196,7 +194,7 @@ async def upload_document(
     # 写入
     errors = es.insert(chunks, idx)
     try:
-        es.es.indices.refresh(index=idx)
+        es.refresh_index(idx)
     except Exception:
         pass
 

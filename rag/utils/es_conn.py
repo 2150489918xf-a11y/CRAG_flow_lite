@@ -99,6 +99,37 @@ class ESConnection(DocStoreConnection):
         )
         logger.info(f"Updated _meta for {index_name}: {meta_fields}")
 
+    def list_indices(self, prefix="ragflow_lite_*"):
+        """列出匹配前缀的所有索引"""
+        try:
+            return dict(self.es.indices.get(index=prefix))
+        except Exception:
+            return {}
+
+    def count_docs(self, index_name):
+        """获取索引中的文档数量"""
+        try:
+            return self.es.count(index=index_name)["count"]
+        except Exception:
+            return 0
+
+    def search_raw(self, index_name, body):
+        """执行原始查询（用于文档列表等管理操作）"""
+        return self.es.search(index=index_name, body=body)
+
+    def delete_by_query(self, index_name, body):
+        """按原始查询条件删除文档，返回删除数量"""
+        try:
+            res = self.es.delete_by_query(index=index_name, body=body, refresh=True)
+            return res.get("deleted", 0)
+        except Exception as e:
+            logger.warning(f"delete_by_query failed: {e}")
+            return 0
+
+    def refresh_index(self, index_name):
+        """刷新索引"""
+        self.es.indices.refresh(index=index_name)
+
     def search(self, select_fields, highlight_fields, condition, match_expressions,
                offset, limit, index_names, rank_feature=None, exclude_parent=False):
         """

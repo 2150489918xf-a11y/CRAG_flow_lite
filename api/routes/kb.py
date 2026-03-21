@@ -107,7 +107,7 @@ async def create_knowledgebase(req: KnowledgeBaseCreate):
 
     # Check if an index with this display name already exists
     try:
-        existing = es.es.indices.get(index="ragflow_lite_*")
+        existing = es.list_indices()
         for existing_idx in existing:
             meta = es.get_index_meta(existing_idx)
             if meta.get("display_name") == display_name:
@@ -146,11 +146,11 @@ async def list_knowledgebases(folder: str = None):
     """
     es = get_es()
     try:
-        indices = es.es.indices.get(index="ragflow_lite_*")
+        indices = es.list_indices()
         kbs = []
         for idx_name_str, info in indices.items():
             kb_id = idx_name_str.replace("ragflow_lite_", "")
-            count = es.es.count(index=idx_name_str)["count"]
+            count = es.count_docs(idx_name_str)
             meta = es.get_index_meta(idx_name_str)
             display_name = meta.get("display_name", kb_id)
             kb_folder = meta.get("folder", "/")
@@ -247,7 +247,7 @@ async def delete_folder(path: str):
     # 检查是否有 KB 在该文件夹下
     es = get_es()
     try:
-        indices = es.es.indices.get(index="ragflow_lite_*")
+        indices = es.list_indices()
         for idx_name_str in indices:
             meta = es.get_index_meta(idx_name_str)
             kb_folder = meta.get("folder", "/")
@@ -309,12 +309,12 @@ async def get_folder_tree():
     es = get_es()
     kb_map = {}  # folder -> [kb_info, ...]
     try:
-        indices = es.es.indices.get(index="ragflow_lite_*")
+        indices = es.list_indices()
         for idx_name_str in indices:
             kb_id = idx_name_str.replace("ragflow_lite_", "")
             meta = es.get_index_meta(idx_name_str)
             kb_folder = meta.get("folder", "/")
-            count = es.es.count(index=idx_name_str)["count"]
+            count = es.count_docs(idx_name_str)
 
             # 确保 KB 的文件夹在 folders 中
             folders.add(kb_folder)

@@ -23,7 +23,7 @@ class DocStoreConnection(ABC):
     # ──────────────── 索引管理 ────────────────
 
     @abstractmethod
-    def create_idx(self, index_name: str, mapping_path: str = None, display_name: str = None) -> bool:
+    def create_idx(self, index_name: str, mapping_path: str = None, display_name: str = None, folder: str = "/") -> bool:
         """创建索引/Collection"""
         ...
 
@@ -39,7 +39,40 @@ class DocStoreConnection(ABC):
 
     @abstractmethod
     def get_index_meta(self, index_name: str) -> dict:
-        """获取索引的元信息（如 display_name 等）"""
+        """获取索引的元信息（如 display_name, folder 等）"""
+        ...
+
+    @abstractmethod
+    def update_index_meta(self, index_name: str, **meta_fields):
+        """更新索引的元信息（增量合并）"""
+        ...
+
+    @abstractmethod
+    def list_indices(self, prefix: str = "ragflow_lite_*") -> dict[str, dict]:
+        """
+        列出匹配前缀的所有索引。
+        Returns: {index_name: {info...}, ...}
+        """
+        ...
+
+    @abstractmethod
+    def count_docs(self, index_name: str) -> int:
+        """获取索引中的文档数量"""
+        ...
+
+    @abstractmethod
+    def search_raw(self, index_name: str, body: dict) -> dict:
+        """执行原始查询（用于文档列表等管理操作）"""
+        ...
+
+    @abstractmethod
+    def delete_by_query(self, index_name: str, body: dict) -> int:
+        """按原始查询条件删除文档，返回删除数量"""
+        ...
+
+    @abstractmethod
+    def refresh_index(self, index_name: str):
+        """刷新索引使最近的写入可被搜索到"""
         ...
 
     # ──────────────── 文档 CRUD ────────────────

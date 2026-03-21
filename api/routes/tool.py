@@ -86,11 +86,11 @@ async def list_kbs():
     """列出所有可用知识库（供 Agent 发现）"""
     es = get_es()
     try:
-        indices = es.es.indices.get(index="ragflow_lite_*")
+        indices = es.list_indices()
         kbs = []
         for idx_name_str, info in indices.items():
             kb_id = idx_name_str.replace("ragflow_lite_", "")
-            count = es.es.count(index=idx_name_str)["count"]
+            count = es.count_docs(idx_name_str)
             meta = es.get_index_meta(idx_name_str)
             kbs.append({
                 "kb_id": kb_id,
@@ -126,7 +126,7 @@ async def tool_retrieve(req: ToolRetrieveRequest):
     if not kb_ids:
         es = get_es()
         try:
-            indices = es.es.indices.get(index="ragflow_lite_*")
+            indices = es.list_indices()
             kb_ids = [name.replace("ragflow_lite_", "") for name in indices.keys()]
         except Exception:
             kb_ids = []
