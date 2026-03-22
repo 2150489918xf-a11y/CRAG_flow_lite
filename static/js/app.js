@@ -559,9 +559,10 @@ async function doSearch() {
 
     const useGraph = document.getElementById('toggleGraph').classList.contains('active');
     const useCRAG = document.getElementById('toggleCRAG').classList.contains('active');
+    const useWebSearch = document.getElementById('toggleWebSearch').classList.contains('active');
 
-    // Choose endpoint based on whether GraphRAG/CRAG is enabled
-    const endpoint = (useGraph || useCRAG) ? '/api/graph_retrieval' : '/api/retrieval';
+    // Choose endpoint based on whether GraphRAG/CRAG/WebSearch is enabled
+    const endpoint = (useGraph || useCRAG || useWebSearch) ? '/api/graph_retrieval' : '/api/retrieval';
 
     const body = {
         question: q,
@@ -574,6 +575,7 @@ async function doSearch() {
     if (endpoint === '/api/graph_retrieval') {
         body.enable_graph = useGraph;
         body.enable_crag = useCRAG;
+        body.enable_web_search = useWebSearch;
     }
 
     try {
@@ -602,11 +604,42 @@ function renderResults(data) {
     // CRAG indicator
     if (data.crag_score && data.crag_score !== 'disabled' && data.crag_score !== '') {
         const s = data.crag_score.toLowerCase();
-        cragBar.className = `crag-bar ${s}`;
-        const icons = { correct: '🟢', incorrect: '🔴', ambiguous: '🟡', error: '⚠️' };
+        const action = data.crag_action || '';
+        const isFallback = action.includes('FALLBACK');
+
+        cragBar.className = `crag-bar ${s}${isFallback ? ' fallback' : ''}`;
+        const icons = { correct: '🟢', incorrect: '🔴', ambiguous: '🟡', web_only: '🌐', error: '⚠️' };
         document.getElementById('cragLabel').textContent = `${icons[s] || '❓'} CRAG: ${data.crag_score}`;
         document.getElementById('cragInfo').textContent = data.crag_reason || '';
         document.getElementById('cragLatency').textContent = data.crag_latency_ms ? `${data.crag_latency_ms}ms` : '';
+
+        // Show action detail
+        const cragActionEl = document.getElementById('cragAction');
+        if (action) {
+            const actionMap = {
+                'PASS_THROUGH': { icon: '✅', text: '本地知识充足，直接使用本地检索结果' },
+                'SCORCHED_EARTH': { icon: '🌐', text: '本地无相关内容，已切换为外网搜索结果' },
+                'SCORCHED_EARTH_FALLBACK': { icon: '⚠️', text: '本地无相关内容，外网搜索也失败了，已降级返回本地结果（请检查网络连接或 Tavily API）' },
+                'DUAL_AUGMENT': { icon: '🔄', text: '本地信息不完整，已补充外网搜索结果' },
+                'DUAL_AUGMENT_FALLBACK': { icon: '⚠️', text: '本地信息不完整，提炼与外网搜索均失败，已降级返回原始结果' },
+                'WEB_SEARCH_DISABLED': { icon: '🚫', text: '本地无相关内容，但网络检索已关闭，仅返回本地结果（开启🌐网络检索可获取更多结果）' },
+                'REFINE_ONLY': { icon: '✨', text: '网络检索已关闭，仅对本地知识进行了提炼优化' },
+                'REFINE_ONLY_FALLBACK': { icon: '⚠️', text: '网络检索已关闭且本地提炼失败，返回原始结果' },
+                'WEB_SEARCH_DIRECT': { icon: '🌐', text: '已直接执行网络检索，结果已追加到本地结果之后' },
+                'WEB_SEARCH_DIRECT_EMPTY': { icon: '⚠️', text: '网络检索未返回任何结果' },
+                'UNKNOWN_FALLBACK': { icon: '❓', text: '未知状态，返回原始结果' },
+            };
+            const key = Object.keys(actionMap).find(k => action.startsWith(k));
+            const mapped = key ? actionMap[key] : null;
+            if (mapped) {
+                cragActionEl.innerHTML = `<span class="crag-action-icon">${mapped.icon}</span> ${mapped.text}`;
+            } else {
+                cragActionEl.textContent = action;
+            }
+            cragActionEl.style.display = 'block';
+        } else {
+            cragActionEl.style.display = 'none';
+        }
     } else {
         cragBar.className = 'crag-bar';
     }

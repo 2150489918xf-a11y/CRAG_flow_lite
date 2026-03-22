@@ -68,6 +68,11 @@ TOOL_SCHEMA = {
                     "type": "string",
                     "description": "按文件夹过滤知识库（如 '/财务'），留空则搜索全部",
                 },
+                "enable_web_search": {
+                    "type": "boolean",
+                    "description": "是否启用网络检索（外网搜索补充），默认关闭",
+                    "default": False,
+                },
             },
             "required": ["query"],
         },
@@ -203,6 +208,7 @@ async def tool_retrieve(req: ToolRetrieveRequest):
                 logger.warning(f"GraphRAG failed: {e}")
 
     # ── Step 4: CRAG (deep only) ──
+    crag_action = ""
     if mode == "deep":
         crag = get_crag_router()
         if crag:
@@ -211,13 +217,29 @@ async def tool_retrieve(req: ToolRetrieveRequest):
                     question=req.query,
                     local_chunks=chunks,
                     graph_context=graph_context,
+                    enable_web_search=req.enable_web_search,
                 )
                 chunks = crag_result["chunks"]
                 graph_context = crag_result["graph_context"]
                 crag_score = crag_result["crag_score"]
                 crag_reason = crag_result["crag_reason"]
+                crag_action = crag_result["crag_action"]
             except Exception as e:
                 logger.warning(f"CRAG failed: {e}")
+
+    elif req.enable_web_search:
+        # 非 deep 模式，但用户手动开启了网络检索 → 直接搜索并追加
+        from rag.crag.web_search import WebSearcher
+        try:
+            web_searcher = WebSearcher()
+            web_chunks = await web_searcher.search(req.query, top_k=3)
+            if web_chunks:
+                chunks = chunks + web_chunks
+                crag_score = "web_only"
+                crag_reason = "直接执行网络检索"
+                crag_action = f"WEB_SEARCH_DIRECT: 直接外网检索，召回 {len(web_chunks)} 条"
+        except Exception as e:
+            logger.warning(f"Direct web search failed: {e}")
 
     # ── Step 5: 组装 answer_context + sources ──
     context_parts = []
@@ -265,5 +287,6 @@ async def tool_retrieve(req: ToolRetrieveRequest):
             latency_ms=latency_ms,
             crag_score=crag_score,
             crag_reason=crag_reason,
+            crag_action=crag_action,
         ),
     )

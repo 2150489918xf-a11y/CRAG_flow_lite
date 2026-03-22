@@ -160,6 +160,7 @@ async def graph_retrieval(req: GraphRetrievalRequest):
                         question=req.question,
                         local_chunks=text_chunks,
                         graph_context=graph_context,
+                        enable_web_search=req.enable_web_search,
                     )
                 text_chunks = crag_result["chunks"]
                 graph_context = crag_result["graph_context"]
@@ -172,6 +173,31 @@ async def graph_retrieval(req: GraphRetrievalRequest):
                 logger.error(f"CRAG failed, using original data: {e}")
                 crag_score = "error"
                 crag_reason = str(e)[:100]
+
+    elif req.enable_web_search:
+        # CRAG 未开启，但用户手动开启了网络检索 → 直接搜索并追加到结果
+        from rag.crag.web_search import WebSearcher
+        try:
+            t_ws = time.perf_counter()
+            web_searcher = WebSearcher()
+            web_chunks = await web_searcher.search(req.question, top_k=3)
+            ws_latency = int((time.perf_counter() - t_ws) * 1000)
+            if web_chunks:
+                text_chunks = text_chunks + web_chunks
+                crag_score = "web_only"
+                crag_action = f"WEB_SEARCH_DIRECT: 直接外网检索，召回 {len(web_chunks)} 条"
+                crag_reason = "CRAG 未开启，直接执行网络检索"
+                crag_latency = ws_latency
+                logger.info(f"Direct web search: {len(web_chunks)} results ({ws_latency}ms)")
+            else:
+                crag_score = "web_only"
+                crag_action = "WEB_SEARCH_DIRECT_EMPTY: 外网检索无结果"
+                crag_reason = "网络检索未返回结果"
+                crag_latency = ws_latency
+        except Exception as e:
+            logger.error(f"Direct web search failed: {e}")
+            crag_score = "error"
+            crag_reason = f"网络检索失败: {str(e)[:80]}"
 
     # ===== Step 5: 组装最终 chunks =====
     if graph_context.strip():

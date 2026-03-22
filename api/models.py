@@ -45,6 +45,7 @@ class GraphRetrievalRequest(BaseModel):
     highlight: bool = False
     enable_graph: bool = True
     enable_crag: bool = True
+    enable_web_search: bool = False
     n_hops: int = 2
     max_entities: int = 10
     max_relations: int = 15
@@ -98,6 +99,7 @@ class ToolRetrieveRequest(BaseModel):
     top_k: int = 5
     mode: str = "hybrid"
     folder: str = ""  # 按文件夹过滤 (如 "/财务")，留空搜全部
+    enable_web_search: bool = False  # 是否启用网络检索
 
 
 class ToolSource(BaseModel):
@@ -117,6 +119,7 @@ class ToolMetadata(BaseModel):
     latency_ms: int = 0
     crag_score: str = ""
     crag_reason: str = ""
+    crag_action: str = ""
 
 
 class ToolRetrieveResponse(BaseModel):

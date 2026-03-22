@@ -119,6 +119,9 @@
                         <div class="toggle-option active" id="toggleReranker" onclick="toggleOpt(this)">
                             <span class="dot"></span> Reranker
                         </div>
+                        <div class="toggle-option" id="toggleWebSearch" onclick="toggleOpt(this)">
+                            <span class="dot"></span> 🌐网络检索
+                        </div>
                         <div class="toggle-option" id="toggleParams" onclick="toggleParamPanel()">
                             <span class="dot"></span> ⚙️
                         </div>
@@ -186,9 +189,12 @@
 
                 <!-- CRAG Bar -->
                 <div class="crag-bar" id="cragBar">
-                    <span class="label" id="cragLabel"></span>
-                    <span class="info" id="cragInfo"></span>
-                    <span class="latency" id="cragLatency"></span>
+                    <div class="crag-main">
+                        <span class="label" id="cragLabel"></span>
+                        <span class="info" id="cragInfo"></span>
+                        <span class="latency" id="cragLatency"></span>
+                    </div>
+                    <div class="crag-action" id="cragAction"></div>
                 </div>
 
                 <!-- Results -->

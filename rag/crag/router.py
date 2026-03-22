@@ -36,7 +36,8 @@ class CRAGRouter:
         self.refiner = KnowledgeRefiner(self.chat)
 
     async def route(self, question: str, local_chunks: list,
-                    graph_context: str = "") -> dict:
+                    graph_context: str = "",
+                    enable_web_search: bool = True) -> dict:
         """
         CRAG 动态路由主入口
 
@@ -47,6 +48,7 @@ class CRAGRouter:
             question: 用户问题
             local_chunks: Reranker 精排后的本地 chunks
             graph_context: GraphRAG 格式化 CSV 上下文
+            enable_web_search: 是否允许外网搜索
 
         Returns:
             dict: {
@@ -84,40 +86,57 @@ class CRAGRouter:
             # 🔴 幻觉熔断：焦土政策
             # 清空本地垃圾（包括图谱），防止 LLM 被误导产生幻觉
             final_graph = ""
-            logger.info(f"CRAG: Incorrect → scorched earth, web searching: {search_query}")
 
-            web_chunks = await self.web_searcher.search(search_query, top_k=3)
+            if enable_web_search:
+                logger.info(f"CRAG: Incorrect → scorched earth, web searching: {search_query}")
+                web_chunks = await self.web_searcher.search(search_query, top_k=3)
 
-            if web_chunks:
-                final_chunks = web_chunks
-                action = f"SCORCHED_EARTH: 清空本地，外网召回 {len(web_chunks)} 条"
+                if web_chunks:
+                    final_chunks = web_chunks
+                    action = f"SCORCHED_EARTH: 清空本地，外网召回 {len(web_chunks)} 条"
+                else:
+                    # 外搜也失败了 → 降级为返回原始数据（总比空的好）
+                    final_chunks = local_chunks
+                    final_graph = graph_context
+                    action = "SCORCHED_EARTH_FALLBACK: 外搜失败，降级返回原始数据"
+                    logger.warning("CRAG: web search also failed, falling back to local")
             else:
-                # 外搜也失败了 → 降级为返回原始数据（总比空的好）
+                # 网络搜索被关闭
                 final_chunks = local_chunks
                 final_graph = graph_context
-                action = "SCORCHED_EARTH_FALLBACK: 外搜失败，降级返回原始数据"
-                logger.warning("CRAG: web search also failed, falling back to local")
+                action = "WEB_SEARCH_DISABLED: 本地无相关内容，但网络检索已关闭，返回本地结果"
+                logger.info("CRAG: Incorrect but web search disabled, using local data")
 
         elif score == "Ambiguous":
             # 🟡 信息残缺：双管齐下（并发执行，解决冲突4）
             logger.info(f"CRAG: Ambiguous → parallel refine + web search: {search_query}")
 
-            # asyncio.gather 并发：提炼本地 + 外网找补
-            refine_task = self.refiner.refine(question, local_chunks)
-            search_task = self.web_searcher.search(search_query, top_k=2)
+            if enable_web_search:
+                # asyncio.gather 并发：提炼本地 + 外网找补
+                refine_task = self.refiner.refine(question, local_chunks)
+                search_task = self.web_searcher.search(search_query, top_k=2)
 
-            refined_chunks, web_chunks = await asyncio.gather(
-                refine_task, search_task
-            )
+                refined_chunks, web_chunks = await asyncio.gather(
+                    refine_task, search_task
+                )
 
-            final_chunks = refined_chunks + web_chunks
-            action = (f"DUAL_AUGMENT: 提炼 {len(refined_chunks)} 条 + "
-                       f"外搜 {len(web_chunks)} 条")
+                final_chunks = refined_chunks + web_chunks
+                action = (f"DUAL_AUGMENT: 提炼 {len(refined_chunks)} 条 + "
+                           f"外搜 {len(web_chunks)} 条")
 
-            if not final_chunks:
-                # 都失败了 → 降级
-                final_chunks = local_chunks
-                action = "DUAL_AUGMENT_FALLBACK: 提炼和外搜均失败，降级返回原始数据"
+                if not final_chunks:
+                    # 都失败了 → 降级
+                    final_chunks = local_chunks
+                    action = "DUAL_AUGMENT_FALLBACK: 提炼和外搜均失败，降级返回原始数据"
+            else:
+                # 网络搜索被关闭，仅做本地提炼
+                refined_chunks = await self.refiner.refine(question, local_chunks)
+                if refined_chunks:
+                    final_chunks = refined_chunks
+                    action = f"REFINE_ONLY: 网络检索已关闭，仅提炼本地知识 {len(refined_chunks)} 条"
+                else:
+                    final_chunks = local_chunks
+                    action = "REFINE_ONLY_FALLBACK: 网络检索已关闭且提炼失败，返回原始结果"
 
         else:
             # 未知状态 → 安全默认
